@@ -12,3 +12,6 @@ dist/
 # OS noise
 Thumbs.db
 .DS_Store
+
+# Supabase CLI scratch state
+supabase/.temp/
