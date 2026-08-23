@@ -54,6 +54,8 @@ The page renders its table client-side, which means the data arrives as JSON. Op
 
 **Pool distribution** — the CRS score distribution table is published on the rounds page a few days before each round. Capture it. It is what lets the product say *"1,340 people sit between you and the last cut-off"*, which is the single most useful number nobody else surfaces well.
 
+Note the trap: the counts arrive in the rounds JSON as `dd1`…`dd18`, but **their CRS bucket ranges do not.** The payload's `classes` key is the string `"wb-tables"` — a CSS class, not bucket definitions. The ranges exist only in the HTML page, so `pool_snapshots` needs either a reviewed constant map or an HTML parse. Deferred for now; `dd1`…`dd18` are preserved in each round's `raw`, so it can be backfilled later without re-fetching.
+
 **Newsroom** — canada.ca news filtered to IRCC publishes an RSS/Atom feed. Fall back to the news-listing HTML.
 
 **Processing times** — a form-driven lookup, not a feed. Defer entirely; it is a different data shape and a different scrape.
@@ -77,7 +79,7 @@ create table categories (
 );
 
 create table draw_rounds (
-  round_number  integer primary key,
+  round_number  text        primary key,       -- '437', '91a', '91b'
   drawn_at      timestamptz not null,
   round_type    text        not null,          -- general | program | category
   category_code text        references categories(code),
@@ -87,7 +89,7 @@ create table draw_rounds (
   source_url    text        not null,
   raw           jsonb       not null,
   ingested_at   timestamptz not null default now(),
-  constraint cutoff_plausible      check (cutoff_crs  between 100 and 1200),
+  constraint cutoff_plausible      check (cutoff_crs  between 0 and 1200),
   constraint invitations_plausible check (invitations between 1 and 200000)
 );
 create index draw_rounds_drawn_at_idx  on draw_rounds (drawn_at desc);
@@ -147,7 +149,8 @@ create table quarantined_rows (
 
 Choices to not "improve":
 
-- `round_number` is the natural primary key. IRCC assigns it, it's unique and monotonic, and it makes re-ingestion idempotent for free. No surrogate UUID.
+- `round_number` is the natural primary key. IRCC assigns it and it makes re-ingestion idempotent for free. No surrogate UUID. It is **`text`, not `integer`, and not monotonic**: IRCC has published rounds `91a` and `91b`, which `parseInt` collapses onto `91`, silently destroying one of them and leaving a backfill one row short. Order by `drawn_at`, never by `round_number`.
+- `cutoff_crs` floors at **0, not 100**. Round 176 (Canadian Experience Class, 13 February 2021) had a cut-off of 75. The observed range across all published rounds is 75–902.
 - `category_code` is **nullable**. General rounds have no category. A `not null` column here cannot represent the data.
 - `raw` keeps the original payload for every row. Non-negotiable — it's how a parser bug gets fixed without re-fetching history.
 - The `check` constraints sit *behind* application validation, not instead of it. Both exist.
@@ -159,10 +162,14 @@ Choices to not "improve":
 Enable RLS on **every** table, including ones nothing reads yet. Turning it on after a client exists is how data leaks.
 
 ```sql
-alter table draw_rounds     enable row level security;
-alter table categories      enable row level security;
-alter table pool_snapshots  enable row level security;
-alter table rule_sets       enable row level security;
+alter table draw_rounds      enable row level security;
+alter table categories       enable row level security;
+alter table pool_snapshots   enable row level security;
+alter table rule_sets        enable row level security;
+-- Operational tables: RLS on, no policies at all. Service role only.
+alter table source_snapshots enable row level security;
+alter table ingestion_runs   enable row level security;
+alter table quarantined_rows enable row level security;
 
 create policy "public read draws"      on draw_rounds    for select to anon, authenticated using (true);
 create policy "public read categories" on categories     for select to anon, authenticated using (true);
@@ -212,9 +219,14 @@ The failure to design against is not downtime, it's silent staleness.
 | Check | Fails when |
 |---|---|
 | `parseProducedRows` | zero rows parsed from a changed body |
-| `fetchRecent` | no `ok` or `no_change` run in 6 hours |
+| `fetchRecent` | no `ok` or `no_change` run within the configured window |
 | `drawRecent` | no new round in 21 days |
 | `nothingQuarantined` | unresolved rows in `quarantined_rows` |
+
+`fetchRecent`'s window is **a parameter, not a fixed 6 hours**. The cadence above runs weekdays
+08:00–20:00 ET, so a 6-hour window fails every night and all weekend by design, and a check that cries
+wolf is one everyone learns to ignore. It defaults to 72 hours, which spans a weekend plus a margin;
+set it to match whatever cadence is actually deployed.
 
 `drawRecent` covers the case the others miss: IRCC paused rounds, or the parser is quietly returning an empty-but-valid structure.
 
@@ -253,6 +265,7 @@ type RuleSet = {
   id: string;
   label: string;
   effectiveFrom: string;
+  effectiveTo: string | null;
   status: 'active' | 'superseded' | 'proposed';
   sourceUrl: string;
   maxTotal: number;
@@ -271,11 +284,14 @@ Each factor gets its own file, is pure, takes `(profile, ruleSet)`, returns `Fac
 
 ### Domain facts to verify against
 
-**Source every number from IRCC's own CRS criteria page and check totals against IRCC's own calculator.** Do not take numbers from training data or from third-party calculator sites. The facts below are what you should *expect to find* — if a source disagrees with one of them, stop and flag it rather than picking a side.
+**Source every number from IRCC's own CRS criteria page and check totals against IRCC's own calculator.**
+The criteria page lives at `.../express-entry/check-score/crs-criteria.html`. The older
+`.../criteria-comprehensive-ranking-system/grid.html` now 301-redirects there — and since fetching uses
+`redirect: 'manual'`, a stale constant is a hard failure, not a silent follow. Do not take numbers from training data or from third-party calculator sites. The facts below are what you should *expect to find* — if a source disagrees with one of them, stop and flag it rather than picking a side.
 
 - **Arranged employment is zero.** Removed 25 March 2025. Do not add a job-offer field that awards points, however plausible it looks in an older tutorial. This is the most likely correctness failure in the whole project.
-- **Section caps apply after summing, not per item.** Core is capped at 500, or 460 with an accompanying spouse.
-- **Skill transferability caps at 100 overall**, with a 50-point sub-cap on the education pair and another 50 on the foreign-work pair.
+- **Section caps apply after summing, not per item.** Core is capped at 500, or 460 with an accompanying spouse. The spouse section itself caps at 40 (education 10, language 20, Canadian work 10).
+- **Skill transferability caps at 100 overall**, over **three** sub-sections of 50 each, not two: the education pair, the foreign-work pair, and the **certificate of qualification** pair for trade occupations. The certificate pair is the one most often missed — note its language thresholds are CLB 5/CLB 7, not the CLB 7/CLB 9 used by the other two.
 - **CLB 9 is a cliff.** Skill transferability roughly doubles at CLB 9 across all four abilities.
 - **French bonus is 25 or 50**, keyed on NCLC 7+ in French and whether English is CLB 5+.
 - **Provincial nomination is 600** and swamps everything else. It is its own path in the UI, not a checkbox at the bottom.
@@ -360,3 +376,37 @@ Government of Canada web content is generally reusable under the Open Government
 **Do not use the Canada wordmark, the flag symbol, or any IRCC branding** in the app icon, splash screen, store listing, or marketing. Those are protected. Name and iconography must be clearly yours.
 
 Personal data: profile inputs are personal information under PIPEDA and Quebec's Law 25, and a meaningful share of users will be in GDPR territory. Never log a profile, never include one in an error message.
+
+---
+
+## 11. Corrections log
+
+This document is the source of truth, so when reality contradicts it the document changes and the
+change is recorded here. Every entry below was verified against live IRCC data on **2026-08-23**, not
+recalled, and each is a defect that would have caused silent data loss or a permanently failing check.
+
+| § | Was | Is | Evidence |
+|---|---|---|---|
+| 4 | `round_number integer primary key` | `text primary key` | IRCC publishes `91a` and `91b`. `parseInt` maps both to `91`, collapsing two rounds into one row; a full backfill lands 437 instead of 438. |
+| 4 | `cutoff_crs between 100 and 1200` | `between 0 and 1200` | Round 176 (CEC, 13 Feb 2021) had a cut-off of **75**. The floor of 100 quarantined a legitimate round, which then fails `nothingQuarantined` forever. Observed range 75–902. |
+| 4 | RLS block covered 4 tables | covers all 7 | The prose already required every table; the SQL omitted `source_snapshots`, `ingestion_runs`, `quarantined_rows`. |
+| 5 | `fetchRecent` fails after 6 hours | configurable, default 72h | The cadence is weekdays 08:00–20:00 ET, so a fixed 6-hour window fails every night and all weekend. |
+| 6 | `RuleSet` had no `effectiveTo` | added | §6 requires `crs-2024` to set `effectiveTo` 2025-03-24, and `rule_sets` has the column. |
+| 6 | Skill transferability had two pairs | three | IRCC's grid has a **certificate of qualification** pair (max 50), on CLB 5/7 thresholds rather than CLB 7/9. |
+| 6 | CRS grid at `.../grid.html` | `.../check-score/crs-criteria.html` | The old URL 301-redirects. With `redirect: 'manual'` a stale constant is a hard failure. |
+| 3 | `classes` implied pool bucket definitions | it is the string `"wb-tables"` | The dd1–dd18 CRS ranges are not in the JSON at all; they exist only in the HTML. |
+
+Confirmed **correct** as written, having been checked rather than assumed:
+
+- **Arranged employment is zero.** The current criteria page contains no mention of it; the only
+  "job offer" text on the page describes its removal. §6's warning stands.
+- Core caps of 500, or 460 with an accompanying spouse, match the published grid exactly
+  (110+150+160+80 = 500; 100+140+150+70 = 460).
+- French bonus is 25 or 50, keyed on NCLC 7+ and whether English is CLB 5+.
+- Provincial nomination is 600.
+- `invitations between 1 and 200000` holds: the observed range is 4–27,332.
+
+One data-quality note that is IRCC's, not ours: `drawDate` and `drawDateTime` disagree on 11 rounds —
+usually by under a day, which is the Ottawa timezone boundary, but once by ten days. `drawDateTime` is
+free text in 11 different formats and `new Date()` fails on 418 of 438 rounds, while `drawDate` is
+clean ISO in all of them. See `packages/ingester/src/dates.ts` for how the two are reconciled.
