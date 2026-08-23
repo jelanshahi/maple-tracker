@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Secrets. The service role key bypasses RLS - it never enters git.
+.env
+.env.local
+
+# Supabase CLI local state
+.supabase/
+
+# OS noise
+Thumbs.db
+.DS_Store
