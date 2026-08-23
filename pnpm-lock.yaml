@@ -21,12 +21,6 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@26.2.0)(vite@8.2.2(@types/node@26.2.0))
 
-  packages/crs-rules:
-    dependencies:
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
-
   packages/ingester:
     dependencies:
       '@supabase/supabase-js':
