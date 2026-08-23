@@ -14,6 +14,10 @@
     "isolatedModules": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+
+    // Node 24 strips types at runtime and requires the real .ts specifier in
+    // the import. Nothing is ever emitted, so there is no path to rewrite.
+    "allowImportingTsExtensions": true
   }
 }
