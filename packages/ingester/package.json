@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "ingest": "node --experimental-strip-types bin/ingest.ts"
+    "ingest": "node --env-file-if-exists=../../.env bin/ingest.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.112.3",

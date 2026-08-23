@@ -73,3 +73,28 @@ describe('findMutations', () => {
     expect(found[0]?.field).toBe(field);
   });
 });
+
+describe('findMutations timestamp formats', () => {
+  // Regression. supabase-js returns timestamptz as "2026-08-19 12:35:37+00",
+  // not as the ISO string we send. Comparing the two as text made every round
+  // look mutated, which quarantined all 438 rows of a live run and wrote none.
+  const postgresStyle = new Map([
+    ['437', { cutoff_crs: 382, invitations: 5000, drawn_at: '2026-08-19 12:35:37+00' }],
+  ]);
+
+  it('treats the Postgres rendering and the ISO string as the same instant', () => {
+    expect(findMutations([round], postgresStyle)).toEqual([]);
+  });
+
+  it('still catches a genuine change when the formats differ', () => {
+    const changed = { ...round, drawn_at: '2026-08-19T12:35:38.000Z' };
+    const found = findMutations([changed], postgresStyle);
+    expect(found).toHaveLength(1);
+    expect(found[0]?.field).toBe('drawn_at');
+  });
+
+  it('flags an unparseable timestamp rather than assuming it matches', () => {
+    const broken = new Map([['437', { cutoff_crs: 382, invitations: 5000, drawn_at: 'not a date' }]]);
+    expect(findMutations([round], broken)).toHaveLength(1);
+  });
+});

@@ -29,7 +29,7 @@ type Rejected = { reason: string; payload: Json };
  * Quarantine, do not abort: one unmappable row must not cost the run nine good
  * rounds. Five new category streams appeared in February 2026 alone.
  */
-function sift(
+export function sift(
   candidates: readonly CandidateRound[],
   existing: ReadonlyMap<string, { cutoff_crs: number; invitations: number; drawn_at: string }>,
 ): { good: CandidateRound[]; bad: Rejected[] } {

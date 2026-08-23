@@ -73,6 +73,21 @@ export type Mutation = {
 };
 
 /**
+ * Compare timestamps as instants, never as strings.
+ *
+ * Postgres renders timestamptz as "2026-08-19 12:35:37+00" while we send ISO
+ * "2026-08-19T12:35:37.000Z". The two describe the same moment and compare
+ * unequal as text, which flagged all 438 rounds as mutated and quarantined an
+ * entire run. An unparseable value on either side counts as different, which
+ * errs towards quarantine rather than towards overwriting history.
+ */
+function isSameInstant(left: string, right: string): boolean {
+  const a = Date.parse(left);
+  const b = Date.parse(right);
+  return Number.isFinite(a) && Number.isFinite(b) && a === b;
+}
+
+/**
  * Detect a published round changing under us.
  *
  * A round that already exists should never change its cut-off, size or date.
@@ -95,7 +110,7 @@ export function findMutations(
     if (before.invitations !== candidate.invitations) {
       mutations.push({ roundNumber: candidate.round_number, field: 'invitations', was: before.invitations, now: candidate.invitations });
     }
-    if (before.drawn_at !== candidate.drawn_at) {
+    if (!isSameInstant(before.drawn_at, candidate.drawn_at)) {
       mutations.push({ roundNumber: candidate.round_number, field: 'drawn_at', was: before.drawn_at, now: candidate.drawn_at });
     }
   }
