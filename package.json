@@ -1,0 +1,20 @@
+{
+  "name": "maple-tracker",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "pnpm -r run typecheck",
+    "ingest": "pnpm --filter @maple/ingester run ingest",
+    "types": "supabase gen types typescript --linked > packages/ingester/src/database.types.ts",
+    "audit": "pnpm audit --audit-level moderate"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "supabase": "2.115.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}

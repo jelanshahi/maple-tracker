@@ -1,0 +1,14 @@
+{
+  "name": "@maple/ingester",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "ingest": "node --experimental-strip-types bin/ingest.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.112.3",
+    "zod": "4.4.3"
+  }
+}
