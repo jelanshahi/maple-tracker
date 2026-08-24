@@ -313,6 +313,16 @@ Never infer, never default. A missing field scores zero for that factor and emit
 
 The second exists to prove the interpreter is genuinely data-driven. **If adding it requires touching `score.ts`, the abstraction has failed** — say so rather than patching around it.
 
+**`crs-2024` sources its numbers from an archived page, and that is deliberate.** IRCC removed the
+arranged-employment rows from the live criteria page when the points were withdrawn on 25 March 2025,
+so there is no live URL that states them. `sourceUrl` therefore cites an Internet Archive capture of
+IRCC's own grid page ([13 December 2024](https://web.archive.org/web/20241213161303/https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry/eligibility/criteria-comprehensive-ranking-system/grid.html),
+"Date modified: 2024-06-13"), which is the only remaining first-party record. Every other value in
+that capture was compared against `crs-current` line by line and matched, so the two rule sets differ
+by exactly the two arranged-employment rows — a test asserts this over the whole grid, not just over
+scored profiles. **This exception applies to superseded rule sets only.** An active rule set must
+still cite a live IRCC page, and a third-party calculator is never an acceptable source.
+
 ### Tests
 
 - ≥15 fixture profiles with hand-verified totals: single vs. married, spouse accompanying vs. not, each education tier, the CLB 7 and CLB 9 thresholds, age-curve boundaries, max and min profiles.
