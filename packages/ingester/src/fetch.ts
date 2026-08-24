@@ -29,7 +29,12 @@ export type FetchedPayload = {
 /** Thrown when a human needs to look: a 4xx, a redirect, or an off-allowlist host. */
 export class FetchNotRetryable extends Error {}
 
-function assertAllowedHost(rawUrl: string): void {
+/**
+ * Exported so the allowlist can be tested directly. It is a security control,
+ * and one whose failure mode is silent: with the URL a module constant it never
+ * fires in normal operation, so nothing but a test would notice it breaking.
+ */
+export function assertAllowedHost(rawUrl: string): void {
   const { hostname } = new URL(rawUrl);
   if (!ALLOWED_HOSTS.has(hostname)) {
     throw new FetchNotRetryable(`host ${hostname} is not on the allowlist`);
