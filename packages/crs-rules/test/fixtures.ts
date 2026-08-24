@@ -9,6 +9,20 @@
  * time. The recurring trap: skill-transferability thresholds are min-based, so
  * one weak ability drops the whole tier, and the certificate pair uses CLB 5/7
  * where the other two pairs use CLB 7/9.
+ *
+ * Four were then run through IRCC's own calculator on 23 August 2026 and match
+ * to the point, section by section rather than only on the grand total:
+ *
+ *   single, 29, bachelor, CLB 9        379  core 354, skill 25
+ *   uneven abilities                   353  core 340, skill 13
+ *   certificate of qualification CLB 5 279  core 254, certificate pair 25
+ *   spouse accompanying                373  core 328, spouse 20, skill 25
+ *
+ * They were picked to cover different machinery rather than to be easy: the
+ * per-ability language sum and the min-based tier drop, the CLB 5/7 thresholds
+ * that differ from every other pair, and the switch to the with-spouse columns.
+ * The calculator also awards nothing for a job offer, which is the check behind
+ * crs-current having no arranged-employment factor at all.
  */
 
 import type { Profile } from '../src/types.ts';
