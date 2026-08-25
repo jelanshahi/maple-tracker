@@ -7,7 +7,7 @@
  * whether rules really are data: adding a rule set must not touch this file.
  */
 
-import { deriveInputs } from './inputs.ts';
+import { deriveInputs, readScalar } from './inputs.ts';
 import type { DerivedInputs } from './inputs.ts';
 import type { RuleSet } from './ruleset.ts';
 import { evaluateFactor, resolvePoints } from './tables.ts';
@@ -55,8 +55,8 @@ function scoreSkillTransfer(
   const subTotals = new Map<string, number>();
 
   for (const combination of section.combinations) {
-    const row = inputs.scalars[combination.rowInput] ?? null;
-    const column = inputs.scalars[combination.columnInput] ?? null;
+    const row = readScalar(inputs, combination.rowInput);
+    const column = readScalar(inputs, combination.columnInput);
     if (row === null || column === null) {
       const missing = row === null ? combination.rowInput : combination.columnInput;
       warnings.push(`${combination.label}: scored 0 because ${missing} was not supplied`);
@@ -78,7 +78,10 @@ function scoreSkillTransfer(
   let raw = 0;
   for (const [group, total] of subTotals) {
     const groupCap = section.subCaps[group];
-    raw += groupCap === undefined ? total : Math.min(total, resolvePoints(groupCap, hasSpouse));
+    // parseRuleSet already rejects a subCap that is not declared, so this is
+    // belt and braces - but it fails closed. Treating an undeclared group as
+    // uncapped is exactly how a one-character typo doubled this section.
+    raw += groupCap === undefined ? 0 : Math.min(total, resolvePoints(groupCap, hasSpouse));
   }
 
   return {
@@ -98,7 +101,18 @@ export function score(profile: Profile, ruleSet: RuleSet): ScoreResult {
     // Spouse factors apply only when a spouse is actually coming along.
     hasSpouse && profile.spouse !== null
       ? scoreFactorSection('spouse', spouse, inputs, hasSpouse)
-      : { section: applyCap('spouse', spouse.label, 0, resolvePoints(spouse.cap, hasSpouse)), factors: [], warnings: [] },
+      : {
+        section: applyCap('spouse', spouse.label, 0, resolvePoints(spouse.cap, hasSpouse)),
+        factors: [],
+        // Declaring an accompanying spouse and supplying no details is the
+        // worst of both columns: core drops to the lower with-spouse scale and
+        // the spouse section pays nothing back. Silence here cost 26 points on
+        // an otherwise ordinary profile, so it warns like any other gap.
+        warnings: hasSpouse
+          ? [`${spouse.label}: scored 0 because an accompanying spouse was declared but no spouse details were supplied,`
+            + ' and core is being scored on the lower with-spouse scale']
+          : [],
+      },
     scoreSkillTransfer(skillTransfer, inputs, hasSpouse),
     scoreFactorSection('additional', additional, inputs, hasSpouse),
   ];

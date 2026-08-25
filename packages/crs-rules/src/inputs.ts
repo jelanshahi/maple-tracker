@@ -13,10 +13,60 @@ import type { LanguageTest, Profile } from './types.ts';
 
 export type Scalar = string | number | boolean | null;
 
+/**
+ * The complete vocabulary a rule set may name, published so it can be checked.
+ *
+ * A rule set is data, which is the point of the design and also its risk: a
+ * one-character typo in an `input` used to score every candidate zero for that
+ * factor and blame them for it in the warning. These lists let `parseRuleSet`
+ * reject an unknown name at load instead, so the mistake surfaces once, loudly,
+ * rather than quietly on every profile.
+ */
+export const scalarInputNames = [
+  'age',
+  'educationLevel',
+  'canadianWorkYears',
+  'foreignWorkYears',
+  'siblingInCanada',
+  'canadianEducationCredential',
+  'provincialNomination',
+  'jobOfferTier',
+  'frenchBonusCategory',
+  'spouseEducationLevel',
+  'spouseCanadianWorkYears',
+  'skillTransferEducationTier',
+  'firstLanguageTier',
+  'certificateLanguageTier',
+  'canadianWorkTier',
+  'foreignWorkTier',
+  'certificateTier',
+] as const;
+
+export const languageInputNames = ['firstOfficial', 'secondOfficial', 'spouseFirstOfficial'] as const;
+
+export type ScalarInputName = (typeof scalarInputNames)[number];
+export type LanguageInputName = (typeof languageInputNames)[number];
+
+/** Keyed rather than open, so deriveInputs cannot drift from the lists above. */
 export type DerivedInputs = {
-  scalars: Record<string, Scalar>;
-  languages: Record<string, LanguageTest | null>;
+  scalars: Record<ScalarInputName, Scalar>;
+  languages: Record<LanguageInputName, LanguageTest | null>;
 };
+
+/**
+ * Read an input a rule set named.
+ *
+ * The cast is safe because `parseRuleSet` has already rejected any name that is
+ * not in the lists above - this is the one place the two meet, so it is the one
+ * place the cast belongs.
+ */
+export function readScalar(inputs: DerivedInputs, name: string): Scalar {
+  return inputs.scalars[name as ScalarInputName] ?? null;
+}
+
+export function readLanguage(inputs: DerivedInputs, name: string): LanguageTest | null {
+  return inputs.languages[name as LanguageInputName] ?? null;
+}
 
 const lowestAbility = (test: LanguageTest | null): number | null =>
   test === null ? null : Math.min(test.reading, test.writing, test.listening, test.speaking);

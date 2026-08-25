@@ -11,6 +11,7 @@
  */
 
 import { z } from 'zod';
+import { languageInputNames, scalarInputNames } from './inputs.ts';
 
 export const conditionSchema = z.union([
   z.object({ kind: z.literal('eq'), value: z.union([z.string(), z.number(), z.boolean()]) }),
@@ -84,7 +85,73 @@ export const ruleSetSchema = z.object({
 });
 export type RuleSet = z.infer<typeof ruleSetSchema>;
 
+const scalars: ReadonlySet<string> = new Set(scalarInputNames);
+const languages: ReadonlySet<string> = new Set(languageInputNames);
+
+/**
+ * Referential integrity: every name a rule set uses must actually resolve.
+ *
+ * The shape checks above accept any string, which is how two silent
+ * mis-scorings got through. A `subCap` naming a group absent from `subCaps`
+ * inherited no cap at all and doubled skill transferability from 50 to 100; an
+ * `input` with a typo looked in the right bag for the wrong key, found nothing,
+ * and scored the factor zero while telling the candidate they had not supplied
+ * it. Both are one mistyped character, and neither is visible in the output.
+ *
+ * They fail here instead, at load, naming the path - so the cost is a thrown
+ * error the first time the rule set is imported, which is a test failure rather
+ * than a wrong answer someone acts on.
+ */
+function checkReferences(ruleSet: RuleSet, ctx: z.RefinementCtx): void {
+  for (const [sectionKey, section] of Object.entries(ruleSet.sections)) {
+    if (!('factors' in section)) continue;
+    for (const [factorKey, table] of Object.entries(section.factors)) {
+      const known = table.mode === 'perAbility' ? languages : scalars;
+      if (!known.has(table.input)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['sections', sectionKey, 'factors', factorKey, 'input'],
+          message: `unknown ${table.mode} input ${JSON.stringify(table.input)}`,
+        });
+      }
+    }
+  }
+
+  const { skillTransfer } = ruleSet.sections;
+  for (const [index, combination] of skillTransfer.combinations.entries()) {
+    const at = (field: string) => ['sections', 'skillTransfer', 'combinations', index, field];
+    for (const field of ['rowInput', 'columnInput'] as const) {
+      if (!scalars.has(combination[field])) {
+        ctx.addIssue({ code: 'custom', path: at(field), message: `unknown input ${JSON.stringify(combination[field])}` });
+      }
+    }
+    if (!Object.hasOwn(skillTransfer.subCaps, combination.subCap)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: at('subCap'),
+        message: `subCap ${JSON.stringify(combination.subCap)} is not declared in subCaps`,
+      });
+    }
+    // A ragged grid means one row is missing a column, which scores 0 for
+    // whoever lands on it and looks exactly like a legitimate zero.
+    const rows = Object.entries(combination.points);
+    const columnsOf = (row: Record<string, number>) => Object.keys(row).sort().join(',');
+    const first = rows[0];
+    if (first !== undefined) {
+      for (const [rowKey, row] of rows) {
+        if (columnsOf(row) !== columnsOf(first[1])) {
+          ctx.addIssue({
+            code: 'custom',
+            path: at('points'),
+            message: `row ${JSON.stringify(rowKey)} does not have the same columns as ${JSON.stringify(first[0])}`,
+          });
+        }
+      }
+    }
+  }
+}
+
 /** Throws on a malformed rule set rather than silently scoring everyone zero. */
 export function parseRuleSet(candidate: unknown): RuleSet {
-  return ruleSetSchema.parse(candidate);
+  return ruleSetSchema.superRefine(checkReferences).parse(candidate);
 }

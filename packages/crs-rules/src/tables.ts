@@ -7,6 +7,7 @@
  * any code.
  */
 
+import { readLanguage, readScalar } from './inputs.ts';
 import type { DerivedInputs, Scalar } from './inputs.ts';
 import type { Condition, FactorTable, Points } from './ruleset.ts';
 import type { FactorScore, LanguageTest } from './types.ts';
@@ -47,7 +48,7 @@ export function evaluateFactor(
   hasSpouse: boolean,
 ): FactorOutcome {
   if (table.mode === 'perAbility') {
-    const test = inputs.languages[table.input] ?? null;
+    const test = readLanguage(inputs, table.input);
     if (test === null) {
       return { score: { key, label: table.label, points: 0, explanation: `no ${table.input} supplied` }, missingInput: true };
     }
@@ -60,7 +61,7 @@ export function evaluateFactor(
     };
   }
 
-  const value = inputs.scalars[table.input] ?? null;
+  const value = readScalar(inputs, table.input);
   if (value === null) {
     return { score: { key, label: table.label, points: 0, explanation: `no ${table.input} supplied` }, missingInput: true };
   }
