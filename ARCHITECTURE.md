@@ -405,6 +405,8 @@ recalled, and each is a defect that would have caused silent data loss or a perm
 | 6 | Skill transferability had two pairs | three | IRCC's grid has a **certificate of qualification** pair (max 50), on CLB 5/7 thresholds rather than CLB 7/9. |
 | 6 | CRS grid at `.../grid.html` | `.../check-score/crs-criteria.html` | The old URL 301-redirects. With `redirect: 'manual'` a stale constant is a hard failure. |
 | 3 | `classes` implied pool bucket definitions | it is the string `"wb-tables"` | The dd1–dd18 CRS ranges are not in the JSON at all; they exist only in the HTML. |
+| 6 | Spouse scored on the applicant's first official language | spouse declares their own | IRCC asks which test the **spouse** took as its own question. Deriving it scored a spouse with a perfect test in the other language 0 of 20, and blamed them for not supplying it. |
+| 6 | Rule sets validated for shape only | references checked at load | A `subCap` naming an undeclared group inherited no cap (skill transferability 50 → 100); an `input` with a typo scored the factor 0 (136 points) and reported it as the candidate's omission. Both are one character and neither was visible in the output. |
 
 Confirmed **correct** as written, having been checked rather than assumed:
 

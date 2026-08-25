@@ -110,7 +110,7 @@ export const fixtures: Fixture[] = [
       siblingInCanada: true,
       canadianEducationCredential: 'three-years-or-more',
       provincialNomination: true,
-      spouse: { educationLevel: 'doctoral', english: clb(10), french: null, canadianWorkYears: 5 },
+      spouse: { educationLevel: 'doctoral', english: clb(10), french: null, firstOfficialLanguage: 'english', canadianWorkYears: 5 },
     }),
     total: 1200,
     workings: 'core capped 460 + spouse capped 40 + skill 100 + additional 600 = the same 1200',
@@ -215,7 +215,7 @@ export const fixtures: Fixture[] = [
     name: 'spouse accompanying scores lower than the same person single',
     profile: complete({
       hasAccompanyingSpouse: true,
-      spouse: { educationLevel: 'bachelors-or-three-year', english: clb(7), french: null, canadianWorkYears: 0 },
+      spouse: { educationLevel: 'bachelors-or-three-year', english: clb(7), french: null, firstOfficialLanguage: 'english', canadianWorkYears: 0 },
     }),
     total: 373,
     workings:

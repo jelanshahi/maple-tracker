@@ -1,16 +1,18 @@
 /**
- * Regressions for three ways a rule set could be wrong without saying so.
+ * Regressions for four ways the engine could be wrong without saying so.
  *
- * All three came out of a review and were confirmed by running them. What they
- * share is a failure mode: the engine kept scoring, produced a plausible
- * number, and either said nothing or blamed the candidate for a mistake in the
- * rule set. A wrong answer nobody can see is worse than a crash.
+ * All four came out of a code review and were confirmed by running them before
+ * anything was changed. What they share is a failure mode: the engine kept
+ * scoring, produced a plausible number, and either said nothing or blamed the
+ * candidate for a mistake that was not theirs. A wrong answer nobody can see is
+ * worse than a crash, and these are scores people make decisions on.
  */
 
 import { describe, expect, it } from 'vitest';
 import { parseRuleSet } from '../src/ruleset.ts';
 import { score } from '../src/score.ts';
 import { crsCurrent } from '../src/rulesets/crs-current.ts';
+import type { Profile } from '../src/types.ts';
 import { clb, complete } from './fixtures.ts';
 
 /** Just the parts these tests deliberately break. */
@@ -115,6 +117,41 @@ describe('parseRuleSet rejects a name that does not resolve', () => {
 
   it('still accepts the rule sets we ship', () => {
     expect(() => parseRuleSet(draft())).not.toThrow();
+  });
+});
+
+describe('the spouse declares their own first official language', () => {
+  const frenchSpouse: NonNullable<Profile['spouse']> = {
+    educationLevel: 'bachelors-or-three-year',
+    english: null,
+    french: clb(10),
+    firstOfficialLanguage: 'french',
+    canadianWorkYears: 0,
+  };
+  const withSpouse = (spouse: NonNullable<Profile['spouse']>) =>
+    complete({ hasAccompanyingSpouse: true, firstOfficialLanguage: 'english', spouse });
+  const mixedCouple = withSpouse(frenchSpouse);
+
+  it('scores a spouse tested in the other official language', () => {
+    const result = score(mixedCouple, crsCurrent);
+    // Used to be 0 of 20, with a warning blaming the candidate for an input
+    // they had in fact supplied. Four abilities at CLB 10 pay 5 each.
+    expect(result.factors.find((f) => f.key === 'spouseLanguage')?.points).toBe(20);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('does not read the applicant\'s choice onto the spouse', () => {
+    // Same spouse, same tests, only the spouse's declaration differs. If the
+    // applicant's English were still driving this, both would score alike.
+    const declaresEnglish = withSpouse({ ...frenchSpouse, firstOfficialLanguage: 'english' });
+    expect(score(declaresEnglish, crsCurrent).factors.find((f) => f.key === 'spouseLanguage')?.points).toBe(0);
+  });
+
+  it('infers nothing when the spouse declares no first official language', () => {
+    const undeclared = withSpouse({ ...frenchSpouse, firstOfficialLanguage: null });
+    const result = score(undeclared, crsCurrent);
+    expect(result.factors.find((f) => f.key === 'spouseLanguage')?.points).toBe(0);
+    expect(result.warnings.some((w) => w.includes('spouseFirstOfficial'))).toBe(true);
   });
 });
 

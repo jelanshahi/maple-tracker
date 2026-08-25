@@ -122,10 +122,14 @@ export function deriveInputs(profile: Profile): DerivedInputs {
   const first = profile.firstOfficialLanguage;
   const firstOfficial = first === null ? null : first === 'english' ? profile.english : profile.french;
   const secondOfficial = first === null ? null : first === 'english' ? profile.french : profile.english;
+  // The spouse's own declaration, not the applicant's. Nothing is inferred from
+  // one to the other: a spouse who declares no first official language scores
+  // zero for that factor and is warned about, like any other missing input.
+  const spouseFirst = profile.spouse?.firstOfficialLanguage ?? null;
   const spouseFirstOfficial =
-    first === null || profile.spouse === null
+    profile.spouse === null || spouseFirst === null
       ? null
-      : first === 'english' ? profile.spouse.english : profile.spouse.french;
+      : spouseFirst === 'english' ? profile.spouse.english : profile.spouse.french;
 
   const firstMin = lowestAbility(firstOfficial);
 

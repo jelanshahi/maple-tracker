@@ -40,6 +40,14 @@ export const spouseProfileSchema = z.object({
   educationLevel: z.enum(educationLevels).nullable(),
   english: languageTestSchema.nullable(),
   french: languageTestSchema.nullable(),
+  /**
+   * The spouse chooses their own first official language, independently of the
+   * principal applicant. IRCC's calculator asks which test the spouse took as a
+   * separate question, and a couple applying in different languages is ordinary
+   * rather than exotic - deriving this from the applicant's choice scored a
+   * spouse with a perfect test in the other language zero out of twenty.
+   */
+  firstOfficialLanguage: z.enum(['english', 'french']).nullable(),
   canadianWorkYears: z.number().int().min(0).nullable(),
 });
 

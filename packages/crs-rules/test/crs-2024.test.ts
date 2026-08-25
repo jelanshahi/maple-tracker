@@ -40,7 +40,7 @@ const busy: Profile = complete({
   siblingInCanada: true,
   canadianEducationCredential: 'one-or-two-years',
   jobOfferTier: 'noc-00',
-  spouse: { educationLevel: 'bachelors-or-three-year', english: clb(8), french: null, canadianWorkYears: 1 },
+  spouse: { educationLevel: 'bachelors-or-three-year', english: clb(8), french: null, firstOfficialLanguage: 'english', canadianWorkYears: 1 },
 });
 
 describe('crs-2024 against crs-current', () => {
