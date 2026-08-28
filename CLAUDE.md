@@ -4,7 +4,9 @@ Maple Tracker — Express Entry draw tracking, IRCC news, and a CRS calculator.
 
 `ARCHITECTURE.md` is the source of truth for schema, data sources, and scoring rules. Read it before making any structural decision. This file is how we work together.
 
-**Current scope: steps 1 and 2 of the build order only** — the ingester and the CRS rules package. No UI, no clients, no accounts.
+**Current scope: step 3 of the build order** — the read-only web client: latest draw, history, cut-off ladder. Steps 1 (ingester) and 2 (CRS rules) are complete. No accounts, and no calculator UI — wiring `crs-rules` into the web app is step 4.
+
+The design for this step is `docs/superpowers/specs/2026-08-28-step-3-web-read-only-design.md`.
 
 ---
 
@@ -12,7 +14,7 @@ Maple Tracker — Express Entry draw tracking, IRCC news, and a CRS calculator.
 
 These override any general instinct about how a project "should" be structured.
 
-**Build only what is asked for.** If `ARCHITECTURE.md` §9 doesn't list it in the current step, it's out of scope. Do not add it "for later." Explicitly out of scope right now: any UI, any HTTP API, auth, alerts, email, news ingestion, provincial data, processing times, admin tooling, Docker, monorepo tooling (turbo/nx), CI beyond `test` + `typecheck`.
+**Build only what is asked for.** If `ARCHITECTURE.md` §9 doesn't list it in the current step, it's out of scope. Do not add it "for later." Explicitly out of scope right now: the CRS calculator UI (step 4), accounts, any HTTP API, auth, alerts, email, news ingestion, provincial data, processing times, pool-distribution charts, admin tooling, Docker, deployment and hosting config, monorepo tooling (turbo/nx), CI beyond `test` + `typecheck`.
 
 **No speculative abstraction.** Do not write an interface, base class, factory, adapter, or generic helper until the same shape appears a **third** time. Two similar functions are fine. A `BaseSource` class with one subclass is not. A `utils.ts` of one-off helpers is not.
 
@@ -34,7 +36,9 @@ Dev machine is **Windows**.
 
 ## Stack
 
-Node 20+ · TypeScript 5 strict · ESM · `zod` for validation · `vitest` for tests · `@supabase/supabase-js` · pnpm workspaces.
+Node 20+ · TypeScript 5 strict · ESM · `zod` for validation · `vitest` for tests · `@supabase/supabase-js` · pnpm workspaces · **Next.js (App Router) + React** for the web client.
+
+Styling is **plain CSS Modules** — they ship with Next.js. No Tailwind, no CSS-in-JS, no component library, no icon package. The site is a header and some tables; that does not earn a framework.
 
 Nothing else without asking. Every dependency is a supply-chain surface, and this project reads from a government website and writes to a database with a key that bypasses RLS. Keep the surface small. Before adding a dependency, ask whether 20 lines of your own code would do.
 
@@ -61,10 +65,23 @@ packages/ingester/           all I/O lives here
   bin/ingest.ts              thin entrypoint
   test/
 
+apps/web/                    Next.js App Router, read-only, anon key only
+  app/                       routes: /, /rounds, /rounds/[roundNumber], /categories
+  src/env.ts                 zod-validated SUPABASE_URL + SUPABASE_ANON_KEY
+  src/supabase.ts            anon client, server-only            (I/O edge)
+  src/queries.ts             the reads, returning validated rows  (I/O edge)
+  src/ladder.ts              pure: rounds -> cut-off ladder
+  src/history.ts             pure: filtering, grouping, deltas
+  src/format.ts              pure: dates, timezone labels, movement
+  test/
+
 supabase/migrations/         timestamped .sql, never edited after commit
 ```
 
 `crs-rules` must never import from `ingester`, and must never import Supabase.
+
+`apps/web` must never import from `ingester`. It reads the database directly with the anon key,
+through the public-read RLS policies. It may import `crs-rules` — but not until step 4.
 
 ---
 
@@ -72,12 +89,15 @@ supabase/migrations/         timestamped .sql, never edited after commit
 
 ```
 pnpm ingest       one-off ingestion run
-pnpm test         vitest
+pnpm dev          web client, local dev server
+pnpm build        web client, production build
+pnpm test         vitest, then pnpm audit
 pnpm typecheck    tsc --noEmit
 pnpm types        supabase gen types typescript --linked > packages/ingester/src/database.types.ts
 ```
 
-Run `pnpm test` after any change under `packages/`. Run `pnpm types` after any migration.
+Run `pnpm test` after any change under `packages/` or `apps/`. Run `pnpm types` after any
+migration. `pnpm test` needs a network connection for the audit step; the tests themselves do not.
 
 ---
 
@@ -107,8 +127,14 @@ Requirements, not suggestions.
 - Never log a key, never send one to a client, never embed one in an error message.
 
 **Two keys, two boundaries**
-- The anon key is for future client code and is subject to RLS.
-- The service role key bypasses RLS and is imported only inside `packages/ingester`. Nothing else may touch it.
+- The anon key is subject to RLS and is used by `apps/web`, and only by `apps/web`.
+- The service role key bypasses RLS and is imported only inside `packages/ingester`. Nothing else may touch it — `apps/web` least of all.
+- **The anon key is never `NEXT_PUBLIC_`-prefixed.** It is read server-side, in server components, so no key reaches the browser at all. The public-read policies would make an exposed anon key survivable; not shipping it is still strictly better.
+
+**Reading the database from the web client**
+- **Select explicit columns. Never `select('*')`.** `draw_rounds.raw` holds the entire source payload — the last one was 796 KB — and `*` drags all of it into every page render.
+- Validate query results with zod before use, exactly as the ingester validates at its boundary. The database is trusted, but its shape can drift under the app during a migration, and that should fail loudly rather than render `undefined`.
+- Order by `drawn_at`, never by `round_number`, and never `parseInt` it. IRCC publishes `91a` and `91b`.
 
 **Fetching — this is where a mistake becomes an incident**
 - **Host allowlist.** Module-level `const ALLOWED_HOSTS`. Every URL parsed with `new URL()` and its hostname checked before any request. Reject anything else, including unlisted subdomains.
@@ -167,6 +193,20 @@ Requirements, not suggestions.
 
 ---
 
+## Web client rules
+
+These come from `ARCHITECTURE.md` §7 and §10. They are requirements, not polish.
+
+- **Every number links to its source.** Each round renders its `source_url` to the IRCC page it came from. A number without provenance does not render.
+- **Never silently stale.** The site shows when the data was last verified, and says so plainly when that is over 24 hours old. A tracker that admits it might be stale beats one that quietly lies.
+- **Dates are stored UTC, displayed in local time, and labelled with the timezone.** Tie-break timestamps especially — an unlabelled tie-break time is actively misleading.
+- **No immigration advice.** State facts, show gaps, link to IRCC. Never phrase anything as a prediction or a recommendation about someone's case. IRPA s.91 is a legal boundary, not an editorial preference.
+- **Carry the not-affiliated disclaimer**, in the wording already in `README.md`.
+- **No Canada wordmark, no flag symbol, no IRCC branding.** Attribute under the Open Government Licence.
+- **No outbound requests from the browser.** No analytics, no third-party scripts, no CDN fonts.
+
+---
+
 ## Logging
 
 `console.log` with a single-line JSON object per event: `{ event, runId, ...fields }`. No logging library.
@@ -193,6 +233,15 @@ No stray `console.log` left in committed code — if it's worth keeping it's a s
 - No arranged-employment points anywhere under `crs-current`
 - `crs-rules` has zero runtime dependencies except zod and imports nothing from `ingester`
 
+**Step 3 — web, read-only**
+- `pnpm dev` serves `/`, `/rounds`, `/rounds/[roundNumber]` and `/categories` against live data
+- The latest draw on `/` matches the newest row in `draw_rounds`
+- The cut-off ladder shows all ten seeded categories, including ones with no recent round
+- Every rendered round links to its IRCC source
+- The staleness banner appears past 24h, verified by moving the threshold rather than waiting a day
+- No service role key is reachable from `apps/web`, asserted by a test rather than by inspection
+- `pnpm typecheck`, `pnpm test` and `pnpm build` all clean
+
 ---
 
 ## Don't
@@ -203,10 +252,12 @@ No stray `console.log` left in committed code — if it's worth keeping it's a s
 - Don't edit a committed migration.
 - Don't use the Canada wordmark, the flag symbol, or IRCC branding anywhere.
 - Don't add a dependency without asking.
-- Don't write a network call in a test. Ingester tests use recorded fixture payloads checked into the repo.
+- Don't write a network call in a test. Ingester tests use recorded fixture payloads checked into the repo, and web tests use recorded row fixtures — never a live database.
+- Don't import the service role key, or anything from `packages/ingester`, into `apps/web`.
+- Don't `select('*')` from `draw_rounds`. The `raw` column is the whole source payload.
 
 ---
 
 ## Working agreement
 
-One step at a time. Finish step 1 completely, tests included, before starting step 2. Commit in small logical units with plain-English messages.
+One step at a time. Finish the current step completely, tests included, before starting the next. Steps 1 and 2 are done. Commit in small logical units with plain-English messages.
