@@ -106,11 +106,12 @@ Requires Node 20+ and pnpm.
 
 ```
 pnpm install
-pnpm test        # unit tests, no network
+pnpm test        # unit tests, then a dependency audit
 pnpm typecheck
 pnpm ingest      # one ingestion run
 ```
 
 `pnpm ingest` needs `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `INGEST_CONTACT_URL` in
-`.env` — see `.env.example`. Tests never touch the network; they run against recorded
-fixtures committed to the repository.
+`.env` — see `.env.example`. The tests themselves never touch the network; they run against
+recorded fixtures committed to the repository. `pnpm test` then finishes with `pnpm audit`,
+which does query the registry, so that step needs a connection.
