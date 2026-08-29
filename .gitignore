@@ -2,6 +2,10 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# Next.js build output. next-env.d.ts is committed on purpose: it is generated,
+# but pnpm typecheck is a gate and should not require a build to run first.
+.next/
+
 # Secrets. The service role key bypasses RLS - it never enters git.
 .env
 .env.local

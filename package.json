@@ -10,6 +10,8 @@
     "test": "node scripts/test.mjs",
     "typecheck": "pnpm -r --no-bail run typecheck",
     "ingest": "pnpm --filter @maple/ingester run ingest",
+    "dev": "pnpm --filter @maple/web run dev",
+    "build": "pnpm --filter @maple/web run build",
     "types": "supabase gen types typescript --linked > packages/ingester/src/database.types.ts",
     "audit": "pnpm audit --audit-level moderate"
   },

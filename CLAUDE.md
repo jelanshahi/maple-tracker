@@ -109,7 +109,7 @@ A junior developer must be able to open any file and understand it without chasi
 - **Files under ~150 lines.** If one grows past that, it has a second responsibility.
 - **Pure by default.** I/O lives at the edges in clearly named functions (`fetchRoundsPayload`, `writeRounds`). Logic in the middle takes data and returns data. This is what makes it testable without mocks.
 - **`type` over `interface`.** No `any` — use `unknown` and narrow. No non-null `!`. No `as` casts except immediately after a validator has confirmed the shape.
-- **Named exports only.** No `export default`. No barrel `index.ts` that re-exports — import from the real path. (`crs-rules/src/index.ts` is the one exception: it's the package's public surface and lists exports explicitly.)
+- **Named exports only.** No `export default`. No barrel `index.ts` that re-exports — import from the real path. Two exceptions, both structural rather than stylistic: `crs-rules/src/index.ts` is the package's public surface and lists its exports explicitly, and Next's App Router files (`layout.tsx`, `page.tsx`, `next.config.ts`) are required by the framework to default-export. Everything under `apps/web/src/` follows the normal rule.
 - **No classes** unless there's genuine per-instance state. There isn't, in this scope.
 - **Descriptive names.** `cutoffCrs` not `c`. `roundsSinceLastMatch` not `n`.
 - **Comments explain *why*.** The code says what. Keep comments where a rule is non-obvious or a workaround exists — those are load-bearing. A comment restating the line below it is not.
@@ -204,6 +204,8 @@ These come from `ARCHITECTURE.md` §7 and §10. They are requirements, not polis
 - **Carry the not-affiliated disclaimer**, in the wording already in `README.md`.
 - **No Canada wordmark, no flag symbol, no IRCC branding.** Attribute under the Open Government Licence.
 - **No outbound requests from the browser.** No analytics, no third-party scripts, no CDN fonts.
+- **Never present a comparison that is not like for like.** Withholding a number and saying why beats printing a confident wrong one. `round_type = 'program'` mixes CEC and PNP rounds whose cut-offs are hundreds of points apart, so the ladder shows no movement for it — see `ARCHITECTURE.md` §11.
+- **Timestamps render in UTC and say "UTC".** Not device-local: pages are ISR-cached server renders, so the server does not know the viewer's timezone and must not guess it.
 
 ---
 

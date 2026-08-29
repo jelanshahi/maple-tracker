@@ -16,9 +16,12 @@ A small Next.js site that reads `draw_rounds` and `categories` and renders four 
 | Route | Answers |
 |---|---|
 | `/` | What was the last draw, and is this data current? |
-| `/rounds` | The full published history, filterable. |
-| `/rounds/[roundNumber]` | One round in detail, linked to IRCC's own page. |
-| `/categories` | The cut-off ladder — where each category's line currently sits. |
+| `/rounds` | The full published history. |
+| `/categories` | The cut-off ladder — where each stream's line currently sits. |
+
+*(A `/rounds/[roundNumber]` detail route was in the first draft of this spec and was cut before
+implementation. §9 lists three things; a detail page was a fourth. §7's "every number links to its
+source" means IRCC's own page, which every row already links to directly.)*
 
 No accounts, no calculator, no news, no charts, no alerts. Those are steps 4 and later.
 
@@ -50,24 +53,30 @@ Three ways out:
    `fetchRecent` note warns against.
 2. **Give anon a policy on `ingestion_runs`.** Rejected. It exposes `error` text and row counts
    — operational detail, and `error` is the one column most likely to leak internals.
-3. **A view exposing exactly one aggregate.** *Recommended.*
+3. **A view exposing exactly one aggregate.** *Rejected on review, before implementation.* A
+   Postgres view runs with its owner's privileges by default, so it bypasses RLS **silently**.
+   Supabase warns about exactly this. The mechanism should be visible, not incidental.
 
-The recommendation, as a new migration (never edit a committed one):
+4. **A narrow policy plus a column-level grant.** *Implemented.*
 
 ```sql
-create view public_ingestion_status as
-  select max(finished_at) as last_verified_at
-  from ingestion_runs
-  where status in ('ok', 'no_change');
+create policy "public read verification time"
+  on ingestion_runs for select to anon, authenticated
+  using (status in ('ok', 'no_change'));
 
-grant select on public_ingestion_status to anon, authenticated;
+revoke select on ingestion_runs from anon, authenticated;
+grant select (finished_at) on ingestion_runs to anon, authenticated;
 ```
 
-This is a deliberate, reviewed RLS bypass — a Postgres view runs with its owner's privileges by
-default, which is the mechanism doing the work here, and that must be stated in the migration
-comment because the RLS migration demands a written reason. What escapes is one timestamp. No
-error text, no counts, no run ids, no failure history. Failed runs are excluded so a broken run
-cannot masquerade as a successful check.
+Nothing hidden: anon may read one column, on successful runs only. No error text, no counts, no
+run ids, no failure history. Failed runs are excluded so a broken run cannot masquerade as a
+successful check, and the column grant means a policy widened by accident later still cannot
+reach the other columns.
+
+**Both halves were verified against the live database on a scratch table before being written**,
+rather than assumed: with the grant in place anon read `finished_at` and saw 1 of 2 rows (the
+policy filtering correctly, despite anon holding no privilege on the `status` column the policy
+tests), and selecting `error` returned `permission denied for table`.
 
 **If you would rather not widen RLS at all, the alternative is to drop the staleness banner from
 step 3 and carry it to step 4.** That is a real option. It costs §1's "never silently stale"
