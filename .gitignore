@@ -2,9 +2,16 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# Next.js build output. next-env.d.ts is committed on purpose: it is generated,
-# but pnpm typecheck is a gate and should not require a build to run first.
+# Next.js build output.
+#
+# next-env.d.ts is generated too, and is ignored rather than committed: `next
+# dev` points it at .next/dev/types while `next build` points it at
+# .next/types, so committing it leaves the tree dirty after every switch
+# between the two. Verified that `pnpm typecheck` passes with the file and the
+# whole .next directory absent, and that it still catches a real type error in
+# a .tsx file - so nothing is lost by leaving it out of a fresh clone.
 .next/
+next-env.d.ts
 
 # Secrets. The service role key bypasses RLS - it never enters git.
 .env
