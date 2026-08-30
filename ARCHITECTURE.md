@@ -78,11 +78,20 @@ create table categories (
   active_to   date
 );
 
+-- The four Express Entry programs: cec, pnp, fst, fsw.
+create table programs (
+  code        text primary key,
+  label       text not null,
+  active_from date not null,
+  active_to   date
+);
+
 create table draw_rounds (
   round_number  text        primary key,       -- '437', '91a', '91b'
   drawn_at      timestamptz not null,
   round_type    text        not null,          -- general | program | category
   category_code text        references categories(code),
+  program_code  text        references programs(code),
   cutoff_crs    integer     not null,
   invitations   integer     not null,
   tie_break_at  timestamptz,
@@ -90,10 +99,15 @@ create table draw_rounds (
   raw           jsonb       not null,
   ingested_at   timestamptz not null default now(),
   constraint cutoff_plausible      check (cutoff_crs  between 0 and 1200),
-  constraint invitations_plausible check (invitations between 1 and 200000)
+  constraint invitations_plausible check (invitations between 1 and 200000),
+  constraint program_iff_program_round check (
+    (round_type  = 'program' and program_code is not null) or
+    (round_type in ('general','category') and program_code is null)
+  )
 );
 create index draw_rounds_drawn_at_idx  on draw_rounds (drawn_at desc);
 create index draw_rounds_category_idx  on draw_rounds (category_code, drawn_at desc);
+create index draw_rounds_program_idx   on draw_rounds (program_code, drawn_at desc);
 
 create table pool_snapshots (
   id          bigserial primary key,
@@ -152,6 +166,8 @@ Choices to not "improve":
 - `round_number` is the natural primary key. IRCC assigns it and it makes re-ingestion idempotent for free. No surrogate UUID. It is **`text`, not `integer`, and not monotonic**: IRCC has published rounds `91a` and `91b`, which `parseInt` collapses onto `91`, silently destroying one of them and leaving a backfill one row short. Order by `drawn_at`, never by `round_number`.
 - `cutoff_crs` floors at **0, not 100**. Round 176 (Canadian Experience Class, 13 February 2021) had a cut-off of 75. The observed range across all published rounds is 75–902.
 - `category_code` is **nullable**. General rounds have no category. A `not null` column here cannot represent the data.
+- `program_code` is a **lookup table, not a check constraint**, mirroring `categories`: the foreign key makes an unrecognised program fail loudly instead of landing as a typo, and the label lives in one row rather than being hardcoded by every reader. Programs are **not** categories and do not go in that table — a category is a selection stream IRCC invents and retires at will, a program is defined in the immigration regulations. Overloading `category_code` would have made the ladder work with no code change, which is exactly why it was tempting.
+- `program_iff_program_round` is enforced in SQL because the whole point of the column is that a `program` round can no longer be anonymous. It arrived one migration *after* the column, since the 186 existing program rounds were null until the backfill re-derived them — a constraint added alongside the column would have rejected the table it exists to protect.
 - `raw` keeps the original payload for every row. Non-negotiable — it's how a parser bug gets fixed without re-fetching history.
 - The `check` constraints sit *behind* application validation, not instead of it. Both exist.
 - `categories.active_to` is nullable because categories are retired and re-introduced. Not a boolean.
@@ -164,22 +180,47 @@ Enable RLS on **every** table, including ones nothing reads yet. Turning it on a
 ```sql
 alter table draw_rounds      enable row level security;
 alter table categories       enable row level security;
+alter table programs         enable row level security;
 alter table pool_snapshots   enable row level security;
 alter table rule_sets        enable row level security;
--- Operational tables: RLS on, no policies at all. Service role only.
+alter table news_items       enable row level security;
+-- Operational tables: RLS on, service role only.
 alter table source_snapshots enable row level security;
 alter table ingestion_runs   enable row level security;
 alter table quarantined_rows enable row level security;
 
 create policy "public read draws"      on draw_rounds    for select to anon, authenticated using (true);
 create policy "public read categories" on categories     for select to anon, authenticated using (true);
+create policy "public read programs"   on programs       for select to anon, authenticated using (true);
 create policy "public read pool"       on pool_snapshots for select to anon, authenticated using (true);
 create policy "public read rulesets"   on rule_sets      for select to anon, authenticated using (status <> 'proposed');
+
+-- One column of one operational table, for the staleness banner. See below.
+create policy "public read verification time"
+  on ingestion_runs for select to anon, authenticated using (status in ('ok','no_change'));
+revoke select on ingestion_runs from anon, authenticated;
+grant  select (finished_at) on ingestion_runs to anon, authenticated;
 ```
 
-`source_snapshots`, `ingestion_runs`, `quarantined_rows`: RLS enabled, **no policies at all**. Service role only. Operational data is not public.
+`source_snapshots` and `quarantined_rows`: RLS enabled, **no policies at all**. Service role only. Operational data is not public.
+
+`ingestion_runs` is the one documented exception, and it is deliberately narrow. §5 requires the client
+to surface "last verified at", and that timestamp lives nowhere else. Anon gets **one column,
+`finished_at`, on successful runs only** — not the error text, not the row counts, not the run id, not
+even the existence of a failed run. The column grant, not the policy, is what enforces that: a policy
+widened by accident later still cannot expose columns whose privilege was never granted. Failed runs
+are excluded on purpose, so a week of failures makes the newest visible `finished_at` a week old and
+the staleness banner fires. Adding any further policy to an operational table needs the same kind of
+written reason — see `20260828193000_public_verification_time.sql`, which also records the two
+alternatives that were rejected.
 
 Note the `rule_sets` policy — proposed rule sets stay server-side until launch. Do not add a public policy for them.
+
+`news_items` predates this schema: it holds 100 real IRCC news items from November 2024 to July 2026,
+harvested by an earlier abandoned attempt and deliberately kept by `20260823090000_drop_legacy.sql`
+because re-scraping that history may not be possible. Nothing reads or writes it — news ingestion is
+step 6. It is listed here because it exists in the database and RLS must cover it, not because it is
+in scope.
 
 ---
 
@@ -339,7 +380,8 @@ This influences decisions that cost people years and thousands of dollars.
 1. **Every number links to its source.** Round detail links to the IRCC ministerial instruction. A number without provenance does not render.
 2. **The calculator is an estimate and says so** — once, clearly, on the score screen. Not a wall of legalese, not hidden. Point to IRCC's own tool as the authority.
 3. **No immigration advice.** State facts, show gaps, link to IRCC. Never phrase output as a prediction or a recommendation about someone's case. No lead-gen for consultants.
-4. **Dates from IRCC are UTC.** Store UTC, display in device local time, label the timezone wherever a tie-break time appears.
+4. **Dates from IRCC are UTC.** Store UTC, and label the timezone wherever a tie-break time appears. Rendering is currently **UTC, explicitly labelled**, not device local: pages are server rendered and ISR-cached, so the server neither knows nor may bake in one viewer's timezone. Device-local rendering needs a client component and is deferred — see §11.
+5. **Never present a comparison that is not like for like.** Withholding a number and saying why beats printing a confident wrong one. This is what `program_code` exists for: differencing a PNP round against a CEC round produced a movement figure that described nothing.
 
 Point 3 is a legal boundary as well as an editorial one: IRPA s.91 restricts giving immigration advice for consideration to authorized representatives.
 
@@ -391,9 +433,13 @@ Personal data: profile inputs are personal information under PIPEDA and Quebec's
 
 ## 11. Corrections log
 
-This document is the source of truth, so when reality contradicts it the document changes and the
-change is recorded here. Every entry below was verified against live IRCC data on **2026-08-23**, not
-recalled, and each is a defect that would have caused silent data loss or a permanently failing check.
+This document records the intended design, not the running system. Where the two disagree the running
+system wins: the document changes, and the change is recorded here. Treat anything below as a claim to
+verify rather than a fact to rely on — several entries exist precisely because a plausible-sounding
+line in this file turned out to be wrong.
+
+Entries were verified against live IRCC data on **2026-08-23** unless dated otherwise, not recalled,
+and each is a defect that would have caused silent data loss or a permanently failing check.
 
 | § | Was | Is | Evidence |
 |---|---|---|---|
@@ -407,8 +453,10 @@ recalled, and each is a defect that would have caused silent data loss or a perm
 | 3 | `classes` implied pool bucket definitions | it is the string `"wb-tables"` | The dd1–dd18 CRS ranges are not in the JSON at all; they exist only in the HTML. |
 | 6 | Spouse scored on the applicant's first official language | spouse declares their own | IRCC asks which test the **spouse** took as its own question. Deriving it scored a spouse with a perfect test in the other language 0 of 20, and blamed them for not supplying it. |
 | 6 | Rule sets validated for shape only | references checked at load | A `subCap` naming an undeclared group inherited no cap (skill transferability 50 → 100); an `input` with a typo scored the factor 0 (136 points) and reported it as the candidate's omission. Both are one character and neither was visible in the output. |
-| 4 | `round_type = 'program'` treated as one stream | it is a bucket of several | CEC and PNP rounds are both stored as `program` with a null `category_code`, and nothing distinguishes them outside `raw.drawName`. Their cut-offs are ~520 and ~760, because a nomination is worth 600 points on its own, so differencing consecutive rounds reported a movement of **-237 points** that describes nothing. The web client withholds the figure for that stream; the real fix is a column, and it belongs to the ingester. |
-| 7 | "display in device local time" | UTC, explicitly labelled | Pages are server rendered and ISR-cached, so the server neither knows nor may bake in one viewer's timezone. A mislabelled tie-break time decides who thinks they were invited. Device-local rendering needs a client component and is deferred; every timestamp says UTC in the meantime. |
+| 4 | `round_type = 'program'` treated as one stream | it is a bucket of several, now split by `program_code` | CEC and PNP rounds were both stored as `program` with a null `category_code`, and nothing distinguished them outside `raw.drawName`. Their cut-offs are ~520 and ~760, because a nomination is worth 600 points on its own, so differencing consecutive rounds reported a movement of **-237 points** that describes nothing. **Resolved 2026-08-30** by the `programs` table and `draw_rounds.program_code`: `classifyRound` already recognised the program in order to assign `round_type` at all and merely discarded it, so the 186 existing rows were backfilled from their own stored `raw.drawName` without re-fetching canada.ca. Each program is now its own comparable stream. |
+| 7 | "display in device local time" | UTC, explicitly labelled | Pages are server rendered and ISR-cached, so the server neither knows nor may bake in one viewer's timezone. A mislabelled tie-break time decides who thinks they were invited. Device-local rendering needs a client component and is deferred; every timestamp says UTC in the meantime. §7 itself still said "device local time" long after this row corrected it — fixed **2026-08-30**. |
+| 4 | `ingestion_runs` has "no policies at all" | one column, one policy | **2026-08-30.** `20260828193000_public_verification_time.sql` granted anon `select (finished_at)` on successful runs so the staleness banner in §5 could exist at all. The prose still forbade the policy the schema already had. The grant is narrower than the sentence it replaces, but "no policies" was simply untrue. |
+| 4 | schema block omitted `news_items` | it exists, with a public-read policy | **2026-08-30.** Kept deliberately by `20260823090000_drop_legacy.sql` — 100 real IRCC news items from Nov 2024 to Jul 2026 that may not be re-scrapable. Out of scope until step 6, but a table absent from the schema block is a table nobody remembers to check RLS on. |
 
 Confirmed **correct** as written, having been checked rather than assumed:
 

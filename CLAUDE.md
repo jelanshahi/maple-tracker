@@ -62,7 +62,10 @@ packages/ingester/           all I/O lives here
   src/store.ts               Supabase writes
   src/health.ts              staleness checks (pure)
   src/run.ts                 orchestration + top-level error handling
+  src/backfillPrograms.ts    pure: rows -> program_code backfill plan
+  src/runBackfillPrograms.ts orchestration for the one-off backfill
   bin/ingest.ts              thin entrypoint
+  bin/backfill-program-codes.ts  thin entrypoint, one-off
   test/
 
 apps/web/                    Next.js App Router, read-only, anon key only
@@ -70,9 +73,10 @@ apps/web/                    Next.js App Router, read-only, anon key only
   src/env.ts                 zod-validated SUPABASE_URL + SUPABASE_ANON_KEY
   src/supabase.ts            anon client, server-only            (I/O edge)
   src/queries.ts             the reads, returning validated rows  (I/O edge)
+  src/rows.ts                zod row schemas + row types
   src/ladder.ts              pure: rounds -> cut-off ladder
   src/history.ts             pure: filtering, grouping, deltas
-  src/format.ts              pure: dates, timezone labels, movement
+  src/format.ts              pure: dates, timezone labels, movement, stream labels
   test/
 
 supabase/migrations/         timestamped .sql, never edited after commit
@@ -94,6 +98,12 @@ pnpm build        web client, production build
 pnpm test         vitest, then pnpm audit
 pnpm typecheck    tsc --noEmit
 pnpm types        supabase gen types typescript --linked > packages/ingester/src/database.types.ts
+
+pnpm --filter @maple/ingester run backfill:program-codes
+                  one-off: derives draw_rounds.program_code from each row's own
+                  stored raw.drawName. Required between the two programs
+                  migrations — the not-null constraint aborts without it. Exits
+                  non-zero if any row could not be classified.
 ```
 
 Run `pnpm test` after any change under `packages/` or `apps/`. Run `pnpm types` after any
@@ -204,7 +214,7 @@ These come from `ARCHITECTURE.md` §7 and §10. They are requirements, not polis
 - **Carry the not-affiliated disclaimer**, in the wording already in `README.md`.
 - **No Canada wordmark, no flag symbol, no IRCC branding.** Attribute under the Open Government Licence.
 - **No outbound requests from the browser.** No analytics, no third-party scripts, no CDN fonts.
-- **Never present a comparison that is not like for like.** Withholding a number and saying why beats printing a confident wrong one. `round_type = 'program'` mixes CEC and PNP rounds whose cut-offs are hundreds of points apart, so the ladder shows no movement for it — see `ARCHITECTURE.md` §11.
+- **Never present a comparison that is not like for like.** Withholding a number and saying why beats printing a confident wrong one. `round_type = 'program'` on its own mixes CEC and PNP rounds whose cut-offs are hundreds of points apart, which is why every program round now carries a `program_code` and the ladder keys on that: each program is its own comparable stream. The generic `program` bucket survives only as the honest fallback for a round with no code, and shows no movement — see `ARCHITECTURE.md` §11.
 - **Timestamps render in UTC and say "UTC".** Not device-local: pages are ISR-cached server renders, so the server does not know the viewer's timezone and must not guess it.
 
 ---
