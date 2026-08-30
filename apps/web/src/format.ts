@@ -78,6 +78,26 @@ export function formatChange(change: number | null): string {
 }
 
 /**
+ * Category and program labels in one map, because a round names at most one of
+ * the two and every caller looks a code up without caring which it was.
+ *
+ * Categories are applied last so a category wins a code collision, matching
+ * streamLabel's precedence below. The two code spaces are disjoint today -
+ * category codes are words like 'french' and 'stem', program codes are 'cec',
+ * 'pnp', 'fst', 'fsw' - so this decides nothing yet; it exists so the map and
+ * the lookup cannot disagree if that ever changes.
+ */
+export function mergeStreamLabels(
+  categories: readonly { code: string; label: string }[],
+  programs: readonly { code: string; label: string }[],
+): ReadonlyMap<string, string> {
+  return new Map([
+    ...programs.map((program) => [program.code, program.label] as const),
+    ...categories.map((category) => [category.code, category.label] as const),
+  ]);
+}
+
+/**
  * The human name for the stream a round belongs to, or null when it names
  * neither a category nor a program and only its round type is left to describe
  * it.
@@ -96,7 +116,22 @@ export function streamLabel(
   return labels.get(code) ?? code;
 }
 
-export function describeRoundType(roundType: string, categoryLabel: string | null): string {
-  if (categoryLabel !== null) return categoryLabel;
-  return roundType === 'general' ? 'General (all programs)' : 'Program-specific';
+/**
+ * What to call a round that names neither a category nor a program, keyed by
+ * round type. Shared with the ladder so /categories and /rounds cannot end up
+ * calling the same rounds two different things.
+ *
+ * 'program' says "uncategorised" rather than just "Program-specific" because
+ * such a row means the program_code backfill has not reached it: the honest
+ * reading is "we do not know which program", not "this program has no name".
+ */
+export const UNCATEGORISED_LABELS: Record<string, string> = {
+  general: 'General (all programs)',
+  program: 'Program-specific (uncategorised)',
+};
+
+/** An unknown round type renders as itself rather than as a guess. */
+export function describeRoundType(roundType: string, label: string | null): string {
+  if (label !== null) return label;
+  return UNCATEGORISED_LABELS[roundType] ?? roundType;
 }

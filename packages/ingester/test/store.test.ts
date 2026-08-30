@@ -13,7 +13,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  closeRun, latestSnapshotHash, loadConfig, loadProgramRoundsMissingCode,
+  BACKFILL_LIMIT, closeRun, latestSnapshotHash, loadConfig, loadProgramRoundsMissingCode,
   quarantine, upsertRounds, writeProgramCodeBackfill,
 } from '../src/store.ts';
 import type { Store } from '../src/store.ts';
@@ -209,42 +209,73 @@ describe('closeRun', () => {
 
 const programBackfillRow = {
   round_number: '436',
-  drawn_at: '2026-08-18T10:13:44.000Z',
-  round_type: 'program',
-  category_code: null,
-  cutoff_crs: 523,
-  invitations: 3500,
-  tie_break_at: null,
-  source_url: 'https://www.canada.ca/example',
   raw: { drawName: 'Canadian Experience Class' },
 };
 
 describe('loadProgramRoundsMissingCode', () => {
-  it('selects program rounds with no program code yet', async () => {
+  it('reads only the two columns the backfill derives from', async () => {
     const { store, calls } = fakeStore({ data: [programBackfillRow], error: null });
     const rows = await loadProgramRoundsMissingCode(store);
 
     expect(rows).toEqual([programBackfillRow]);
     const select = calls.find((call) => call.method === 'select');
     expect(select?.table).toBe('draw_rounds');
-    expect(select?.args).toEqual([
-      'round_number, drawn_at, round_type, category_code, cutoff_crs, invitations, tie_break_at, source_url, raw',
-    ]);
+    expect(select?.args).toEqual(['round_number, raw']);
     expect(calls.find((call) => call.method === 'eq')?.args).toEqual(['round_type', 'program']);
     expect(calls.find((call) => call.method === 'is')?.args).toEqual(['program_code', null]);
+  });
+
+  it('bounds the read rather than trusting PostgREST not to truncate it', async () => {
+    const { store, calls } = fakeStore({ data: [programBackfillRow], error: null });
+    await loadProgramRoundsMissingCode(store);
+    expect(calls.find((call) => call.method === 'limit')?.args).toEqual([BACKFILL_LIMIT]);
+  });
+
+  it('throws rather than silently backfilling only the first page', async () => {
+    // A truncated read reports skipped: 0 and exits 0, which an operator reads
+    // as "complete" - and then the not-null constraint aborts on the rows the
+    // backfill never saw.
+    const full = Array.from({ length: BACKFILL_LIMIT }, (_, index) => ({
+      round_number: String(index),
+      raw: { drawName: 'Canadian Experience Class' },
+    }));
+    const { store } = fakeStore({ data: full, error: null });
+    await expect(loadProgramRoundsMissingCode(store)).rejects.toThrow(/row limit/);
   });
 });
 
 describe('writeProgramCodeBackfill', () => {
-  it('writes whole rows with program_code set, in one batched upsert keyed on round_number', async () => {
+  it('updates only program_code, keyed on round_number', async () => {
+    // An upsert would have to send every other column back with it, turning a
+    // one-column backfill into a read-modify-write that can revert a
+    // concurrent ingest correction. update() cannot clobber what it omits.
     const { store, calls } = fakeStore({ data: [{ round_number: '436' }], error: null });
-    const written = await writeProgramCodeBackfill(store, [{ ...programBackfillRow, program_code: 'cec' }]);
+    const written = await writeProgramCodeBackfill(store, [{ round_number: '436', program_code: 'cec' }]);
 
     expect(written).toBe(1);
-    const upsert = calls.find((call) => call.method === 'upsert');
-    expect(upsert?.table).toBe('draw_rounds');
-    expect(upsert?.args[1]).toEqual({ onConflict: 'round_number' });
-    expect(upsert?.args[0]).toEqual([{ ...programBackfillRow, program_code: 'cec' }]);
+    const update = calls.find((call) => call.method === 'update');
+    expect(update?.table).toBe('draw_rounds');
+    expect(update?.args).toEqual([{ program_code: 'cec' }]);
+    expect(calls.find((call) => call.method === 'eq')?.args).toEqual(['round_number', '436']);
+    expect(calls.some((call) => call.method === 'upsert')).toBe(false);
+  });
+
+  it('updates each row in the batch', async () => {
+    const { store, calls } = fakeStore({ data: [{ round_number: 'x' }], error: null });
+    const written = await writeProgramCodeBackfill(store, [
+      { round_number: '436', program_code: 'cec' },
+      { round_number: '435', program_code: 'pnp' },
+    ]);
+
+    expect(written).toBe(2);
+    expect(calls.filter((call) => call.method === 'update').map((call) => call.args[0])).toEqual([
+      { program_code: 'cec' },
+      { program_code: 'pnp' },
+    ]);
+    expect(calls.filter((call) => call.method === 'eq').map((call) => call.args)).toEqual([
+      ['round_number', '436'],
+      ['round_number', '435'],
+    ]);
   });
 
   it('writes nothing for an empty batch', async () => {

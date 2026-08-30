@@ -10,6 +10,7 @@
  * ladder that omitted it would hide the largest group of draws from the page
  * whose job is to show the lines.
  */
+import { UNCATEGORISED_LABELS, mergeStreamLabels } from './format.ts';
 import type { Category, DrawRound, Program } from './rows.ts';
 
 export type LadderEntry = {
@@ -38,11 +39,6 @@ const HETEROGENEOUS_STREAMS = new Set(['program']);
 export function streamKey(round: DrawRound): string {
   return round.category_code ?? round.program_code ?? round.round_type;
 }
-
-const UNCATEGORISED_LABELS: Record<string, string> = {
-  general: 'General (all programs)',
-  program: 'Program-specific (uncategorised)',
-};
 
 /**
  * An unknown code renders as itself rather than as a guess. Categories and
@@ -77,10 +73,7 @@ export function buildLadder(
   categories: readonly Category[],
   programs: readonly Program[],
 ): LadderEntry[] {
-  const streamLabels = new Map<string, string>([
-    ...categories.map((category) => [category.code, category.label] as const),
-    ...programs.map((program) => [program.code, program.label] as const),
-  ]);
+  const streamLabels = mergeStreamLabels(categories, programs);
   const entries: LadderEntry[] = [];
 
   for (const [key, group] of groupByStream(rounds)) {

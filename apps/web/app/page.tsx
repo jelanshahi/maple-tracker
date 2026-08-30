@@ -1,4 +1,6 @@
-import { describeRoundType, formatDate, formatDateTime, formatInteger, streamLabel } from '../src/format.ts';
+import {
+  describeRoundType, formatDate, formatDateTime, formatInteger, mergeStreamLabels, streamLabel,
+} from '../src/format.ts';
 import { fetchCategories, fetchPrograms, fetchRounds } from '../src/queries.ts';
 import { createReadClient } from '../src/supabase.ts';
 import { RoundsTable } from './RoundsTable.tsx';
@@ -15,10 +17,7 @@ export default async function LatestPage() {
     fetchCategories(client),
     fetchPrograms(client),
   ]);
-  const streamLabels = new Map<string, string>([
-    ...categories.map((category) => [category.code, category.label] as const),
-    ...programs.map((program) => [program.code, program.label] as const),
-  ]);
+  const streamLabels = mergeStreamLabels(categories, programs);
   const latest = rounds[0];
 
   if (latest === undefined) {

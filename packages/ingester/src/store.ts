@@ -12,6 +12,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import type { BackfillRow } from './backfillPrograms.ts';
 import type { Database, Json } from './database.types.ts';
 import type { CandidateRound } from './parse.ts';
 
@@ -134,40 +135,51 @@ export async function upsertRounds(store: Store, rounds: readonly CandidateRound
   return rounds.length;
 }
 
-export type ProgramBackfillRow = Pick<
-  Database['public']['Tables']['draw_rounds']['Row'],
-  'round_number' | 'drawn_at' | 'round_type' | 'category_code' | 'cutoff_crs' | 'invitations' | 'tie_break_at' | 'source_url' | 'raw'
->;
-
-const PROGRAM_BACKFILL_COLUMNS =
-  'round_number, drawn_at, round_type, category_code, cutoff_crs, invitations, tie_break_at, source_url, raw';
-
 /**
- * Program rounds that still need a program_code, for the one-off backfill.
- * Reads the whole row (not just round_number/raw) because supabase-js's
- * upsert typing requires every column the generated Insert type marks
- * required - see the Task 7 design note above.
+ * PostgREST caps an unbounded select at 1000 rows and says nothing about it, so
+ * this asks for more than the cap and fails if it is ever actually reached.
+ * A silently truncated read is the dangerous case here: the backfill would
+ * report skipped: 0 and exit 0, and the not-null constraint that follows it
+ * would then abort on the rows it never saw. Mirrors ROUND_LIMIT in
+ * apps/web/src/queries.ts.
  */
-export async function loadProgramRoundsMissingCode(store: Store): Promise<ProgramBackfillRow[]> {
+export const BACKFILL_LIMIT = 5000;
+
+/** Program rounds that still need a program_code, for the one-off backfill. */
+export async function loadProgramRoundsMissingCode(store: Store): Promise<BackfillRow[]> {
   const rows = must(
-    await store.from('draw_rounds').select(PROGRAM_BACKFILL_COLUMNS)
-      .eq('round_type', 'program').is('program_code', null),
+    await store.from('draw_rounds').select('round_number, raw')
+      .eq('round_type', 'program').is('program_code', null).limit(BACKFILL_LIMIT),
     'read program rounds missing a program code',
   );
+  if (rows.length >= BACKFILL_LIMIT) {
+    throw new Error(`read program rounds missing a program code: hit the ${BACKFILL_LIMIT} row limit`);
+  }
   return rows;
 }
 
-/** One call for the whole batch, same shape as upsertRounds. */
+/**
+ * One narrow update per row rather than a batched upsert.
+ *
+ * An upsert would have to carry every other column back with it - supabase-js
+ * types it against the Insert shape - which turns a one-column backfill into a
+ * read-modify-write over live history: an ingest correction landing between the
+ * read and the write would be silently reverted, with none of the findMutations
+ * protection that guards the ingest path. update() cannot clobber a column it
+ * does not mention. The extra round trips are affordable on a one-off script.
+ */
 export async function writeProgramCodeBackfill(
   store: Store,
-  rows: readonly (ProgramBackfillRow & { program_code: string })[],
+  updates: readonly { round_number: string; program_code: string }[],
 ): Promise<number> {
-  if (rows.length === 0) return 0;
-  must(
-    await store.from('draw_rounds').upsert([...rows], { onConflict: 'round_number' }).select('round_number'),
-    'write program code backfill',
-  );
-  return rows.length;
+  for (const update of updates) {
+    must(
+      await store.from('draw_rounds').update({ program_code: update.program_code })
+        .eq('round_number', update.round_number).select('round_number'),
+      `write program code for round ${update.round_number}`,
+    );
+  }
+  return updates.length;
 }
 
 export async function quarantine(

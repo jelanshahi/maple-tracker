@@ -8,6 +8,7 @@ import {
   formatInteger,
   hoursBetween,
   isStale,
+  mergeStreamLabels,
   streamLabel,
 } from '../src/format.ts';
 
@@ -84,11 +85,41 @@ describe('describeRoundType', () => {
 
   it('names the two uncategorised round types', () => {
     expect(describeRoundType('general', null)).toBe('General (all programs)');
-    expect(describeRoundType('program', null)).toBe('Program-specific');
+    // Says "uncategorised" rather than just "Program-specific", and says the
+    // same thing the ladder says, so one row is not named two ways.
+    expect(describeRoundType('program', null)).toBe('Program-specific (uncategorised)');
   });
 
   it('renders a program label the same way it renders a category label', () => {
     expect(describeRoundType('program', 'Canadian Experience Class')).toBe('Canadian Experience Class');
+  });
+});
+
+describe('mergeStreamLabels', () => {
+  it('holds category and program labels in one map', () => {
+    const labels = mergeStreamLabels(
+      [{ code: 'french', label: 'French-language proficiency' }],
+      [{ code: 'cec', label: 'Canadian Experience Class' }],
+    );
+    expect(labels.get('french')).toBe('French-language proficiency');
+    expect(labels.get('cec')).toBe('Canadian Experience Class');
+    expect(labels.size).toBe(2);
+  });
+
+  it('lets a category win a code collision, matching streamLabel precedence', () => {
+    // The two seeded code spaces are disjoint today, so this decides nothing
+    // now - but the map and streamLabel must not disagree about which wins if
+    // that ever stops being true.
+    const labels = mergeStreamLabels(
+      [{ code: 'clash', label: 'the category' }],
+      [{ code: 'clash', label: 'the program' }],
+    );
+    expect(labels.get('clash')).toBe('the category');
+    expect(streamLabel({ category_code: 'clash', program_code: 'clash' }, labels)).toBe('the category');
+  });
+
+  it('returns an empty map for no streams', () => {
+    expect(mergeStreamLabels([], []).size).toBe(0);
   });
 });
 
