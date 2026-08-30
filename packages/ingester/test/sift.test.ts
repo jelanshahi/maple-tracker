@@ -7,6 +7,7 @@ const round = (over: Partial<CandidateRound> = {}): CandidateRound => ({
   drawn_at: '2026-08-19T12:35:37.000Z',
   round_type: 'category',
   category_code: 'french',
+  program_code: null,
   cutoff_crs: 382,
   invitations: 5000,
   tie_break_at: null,

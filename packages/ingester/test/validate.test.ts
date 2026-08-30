@@ -7,6 +7,7 @@ const round: CandidateRound = {
   drawn_at: '2026-08-19T12:35:37.000Z',
   round_type: 'category',
   category_code: 'french',
+  program_code: null,
   cutoff_crs: 382,
   invitations: 5000,
   tie_break_at: '2026-03-01T18:34:05.000Z',
@@ -21,7 +22,7 @@ describe('guardCandidate', () => {
 
   // Round 176's real cut-off of 75 must pass; the original floor of 100 rejected it.
   it('accepts a cut-off of 75', () => {
-    expect(guardCandidate({ ...round, cutoff_crs: 75, round_type: 'program', category_code: null })).toBeNull();
+    expect(guardCandidate({ ...round, cutoff_crs: 75, round_type: 'program', category_code: null, program_code: 'cec' })).toBeNull();
   });
 
   it.each([
@@ -39,6 +40,15 @@ describe('guardCandidate', () => {
 
   it('rejects a general round carrying a category', () => {
     expect(guardCandidate({ ...round, round_type: 'general' })).toMatch(/carries a category code/);
+  });
+
+  it('rejects a program round with no program code', () => {
+    expect(guardCandidate({ ...round, round_type: 'program', category_code: null, program_code: null }))
+      .toMatch(/program round with no program code/);
+  });
+
+  it('rejects a category round carrying a program code', () => {
+    expect(guardCandidate({ ...round, program_code: 'cec' })).toMatch(/carries a program code/);
   });
 
   it('rejects a tie-break after the draw', () => {

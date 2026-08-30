@@ -59,6 +59,12 @@ export function guardCandidate(candidate: CandidateRound): string | null {
   if (candidate.round_type !== 'category' && candidate.category_code !== null) {
     return `${candidate.round_type} round carries a category code`;
   }
+  if (candidate.round_type === 'program' && candidate.program_code === null) {
+    return 'program round with no program code';
+  }
+  if (candidate.round_type !== 'program' && candidate.program_code !== null) {
+    return `${candidate.round_type} round carries a program code`;
+  }
   if (candidate.tie_break_at !== null && candidate.tie_break_at > candidate.drawn_at) {
     return 'tie_break_at is after drawn_at';
   }
