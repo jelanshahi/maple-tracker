@@ -26,6 +26,7 @@ export const drawRoundSchema = z.object({
   drawn_at: z.string(),
   round_type: z.enum(roundTypes),
   category_code: z.string().nullable(),
+  program_code: z.string().nullable(),
   cutoff_crs: z.number().int(),
   invitations: z.number().int(),
   tie_break_at: z.string().nullable(),
@@ -40,3 +41,10 @@ export const categorySchema = z.object({
 });
 
 export type Category = z.infer<typeof categorySchema>;
+
+export const programSchema = z.object({
+  code: z.string(),
+  label: z.string(),
+});
+
+export type Program = z.infer<typeof programSchema>;

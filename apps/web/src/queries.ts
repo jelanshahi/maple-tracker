@@ -5,12 +5,12 @@
  * draw_rounds.raw - the entire source payload - into every page render.
  */
 import { z } from 'zod';
-import { categorySchema, drawRoundSchema } from './rows.ts';
-import type { Category, DrawRound } from './rows.ts';
+import { categorySchema, drawRoundSchema, programSchema } from './rows.ts';
+import type { Category, DrawRound, Program } from './rows.ts';
 import type { ReadClient } from './supabase.ts';
 
 const ROUND_COLUMNS =
-  'round_number, drawn_at, round_type, category_code, cutoff_crs, invitations, tie_break_at, source_url';
+  'round_number, drawn_at, round_type, category_code, program_code, cutoff_crs, invitations, tie_break_at, source_url';
 
 /**
  * PostgREST caps an unbounded select at 1000 rows and says nothing about it.
@@ -46,6 +46,11 @@ export async function fetchRounds(client: ReadClient): Promise<DrawRound[]> {
 export async function fetchCategories(client: ReadClient): Promise<Category[]> {
   const rows = must(await client.from('categories').select('code, label'), 'read categories');
   return z.array(categorySchema).parse(rows);
+}
+
+export async function fetchPrograms(client: ReadClient): Promise<Program[]> {
+  const rows = must(await client.from('programs').select('code, label'), 'read programs');
+  return z.array(programSchema).parse(rows);
 }
 
 /**

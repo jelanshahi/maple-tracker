@@ -6,6 +6,7 @@ function round(overrides: Partial<DrawRound> & Pick<DrawRound, 'round_number' | 
   return {
     round_type: 'category',
     category_code: 'french',
+    program_code: null,
     cutoff_crs: 400,
     invitations: 5000,
     tie_break_at: null,
