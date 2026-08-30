@@ -2,14 +2,15 @@
  * The cut-off ladder: where each stream's line currently sits, and which way it
  * last moved.
  *
- * A "stream" is the category where a round has one, and the round type where it
- * does not. Keying the ladder on categories alone was the obvious reading of
- * ARCHITECTURE.md section 9 and it is wrong: 186 program rounds and 178 general
- * rounds carry no category_code at all, and the most recent program round is
- * newer than eight of the ten categories. A ladder that omitted it would hide
- * the largest group of draws from the page whose job is to show the lines.
+ * A "stream" is the category when a round has one, the program when it names
+ * one, and the round type when it has neither. Keying the ladder on categories
+ * alone was the obvious reading of ARCHITECTURE.md section 9 and it is wrong:
+ * 186 program rounds and 178 general rounds carry no category_code at all, and
+ * the most recent program round is newer than eight of the ten categories. A
+ * ladder that omitted it would hide the largest group of draws from the page
+ * whose job is to show the lines.
  */
-import type { Category, DrawRound } from './rows.ts';
+import type { Category, DrawRound, Program } from './rows.ts';
 
 export type LadderEntry = {
   key: string;
@@ -24,36 +25,32 @@ export type LadderEntry = {
 };
 
 /**
- * round_type 'program' is a bucket, not a stream. It mixes Canadian Experience
- * Class rounds, which cut off around 520, with Provincial Nominee Program
- * rounds, which cut off around 760 because a nomination is worth 600 points on
- * its own. Differencing consecutive rounds across those two produced a headline
- * movement of -237 points that describes nothing that happened.
- *
- * The programs are distinguishable only inside raw.drawName, and normalising
- * IRCC's free text into stable codes is the ingester's job, not this app's -
- * doing it here would duplicate that responsibility and drift from it. Until
- * draw_rounds carries a column for the program, the honest move is to withhold
- * the number rather than print a confident wrong one.
+ * A round not yet carrying a program_code falls back to the generic 'program'
+ * bucket, which mixes programs whose cut-offs are not on the same scale (a
+ * provincial nomination is worth 600 points by itself). That bucket is empty
+ * once the ingester backfill and its not-null constraint (see
+ * supabase/migrations/20260829220000_programs_not_null.sql) have run; this
+ * stays as the honest fallback rather than an assumption that they always
+ * have.
  */
 const HETEROGENEOUS_STREAMS = new Set(['program']);
 
 export function streamKey(round: DrawRound): string {
-  return round.category_code ?? round.round_type;
+  return round.category_code ?? round.program_code ?? round.round_type;
 }
 
 const UNCATEGORISED_LABELS: Record<string, string> = {
   general: 'General (all programs)',
-  program: 'Program-specific',
+  program: 'Program-specific (uncategorised)',
 };
 
 /**
- * An unknown code renders as itself rather than as a guess. Categories get
- * added by IRCC faster than seeds do, and inventing a label would be inventing
- * a fact.
+ * An unknown code renders as itself rather than as a guess. Categories and
+ * programs both get added by IRCC faster than seeds do, and inventing a label
+ * would be inventing a fact.
  */
-function labelFor(key: string, categoryLabels: ReadonlyMap<string, string>): string {
-  return categoryLabels.get(key) ?? UNCATEGORISED_LABELS[key] ?? key;
+function labelFor(key: string, streamLabels: ReadonlyMap<string, string>): string {
+  return streamLabels.get(key) ?? UNCATEGORISED_LABELS[key] ?? key;
 }
 
 function byDrawnAtDescending(a: DrawRound, b: DrawRound): number {
@@ -78,8 +75,12 @@ function groupByStream(rounds: readonly DrawRound[]): Map<string, DrawRound[]> {
 export function buildLadder(
   rounds: readonly DrawRound[],
   categories: readonly Category[],
+  programs: readonly Program[],
 ): LadderEntry[] {
-  const categoryLabels = new Map(categories.map((category) => [category.code, category.label]));
+  const streamLabels = new Map<string, string>([
+    ...categories.map((category) => [category.code, category.label] as const),
+    ...programs.map((program) => [program.code, program.label] as const),
+  ]);
   const entries: LadderEntry[] = [];
 
   for (const [key, group] of groupByStream(rounds)) {
@@ -90,7 +91,7 @@ export function buildLadder(
     const comparable = !HETEROGENEOUS_STREAMS.has(key);
     entries.push({
       key,
-      label: labelFor(key, categoryLabels),
+      label: labelFor(key, streamLabels),
       latest,
       previous,
       change: previous === null || !comparable ? null : latest.cutoff_crs - previous.cutoff_crs,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildLadder, streamKey } from '../src/ladder.ts';
-import type { Category, DrawRound } from '../src/rows.ts';
+import type { Category, DrawRound, Program } from '../src/rows.ts';
 
 function round(overrides: Partial<DrawRound> & Pick<DrawRound, 'round_number' | 'drawn_at'>): DrawRound {
   return {
@@ -20,17 +20,34 @@ const categories: Category[] = [
   { code: 'trades', label: 'Trades occupations' },
 ];
 
+const programs: Program[] = [
+  { code: 'cec', label: 'Canadian Experience Class' },
+  { code: 'pnp', label: 'Provincial Nominee Program' },
+];
+
 describe('streamKey', () => {
   it('uses the category when a round has one', () => {
     expect(streamKey(round({ round_number: '1', drawn_at: '2026-01-01T00:00:00Z' }))).toBe('french');
   });
 
-  it('falls back to the round type, which is how program and general rounds are kept', () => {
+  it('uses the program code when a round has one and no category', () => {
     const programRound = round({
       round_number: '2',
       drawn_at: '2026-01-01T00:00:00Z',
       round_type: 'program',
       category_code: null,
+      program_code: 'cec',
+    });
+    expect(streamKey(programRound)).toBe('cec');
+  });
+
+  it('falls back to the round type when neither a category nor a program code is known', () => {
+    const programRound = round({
+      round_number: '3',
+      drawn_at: '2026-01-01T00:00:00Z',
+      round_type: 'program',
+      category_code: null,
+      program_code: null,
     });
     expect(streamKey(programRound)).toBe('program');
   });
@@ -38,8 +55,6 @@ describe('streamKey', () => {
 
 describe('buildLadder', () => {
   it('keeps uncategorised rounds instead of dropping them', () => {
-    // The bug this guards: keying only on category_code silently hid 186
-    // program rounds and 178 general rounds, the two largest groups there are.
     const ladder = buildLadder(
       [
         round({ round_number: '437', drawn_at: '2026-08-19T12:35:37Z' }),
@@ -48,13 +63,15 @@ describe('buildLadder', () => {
           drawn_at: '2026-08-18T10:13:44Z',
           round_type: 'program',
           category_code: null,
+          program_code: null,
           cutoff_crs: 523,
         }),
       ],
       categories,
+      [],
     );
     expect(ladder.map((entry) => entry.key)).toStrictEqual(['french', 'program']);
-    expect(ladder[1]?.label).toBe('Program-specific');
+    expect(ladder[1]?.label).toBe('Program-specific (uncategorised)');
   });
 
   it('computes movement against the previous round of the same stream', () => {
@@ -64,6 +81,7 @@ describe('buildLadder', () => {
         round({ round_number: '433', drawn_at: '2026-08-06T11:29:10Z', cutoff_crs: 391 }),
       ],
       categories,
+      [],
     );
     expect(ladder[0]?.change).toBe(-9);
     expect(ladder[0]?.previous?.round_number).toBe('433');
@@ -71,7 +89,7 @@ describe('buildLadder', () => {
   });
 
   it('reports no movement for a stream with a single round', () => {
-    const ladder = buildLadder([round({ round_number: '1', drawn_at: '2026-07-23T10:19:47Z' })], categories);
+    const ladder = buildLadder([round({ round_number: '1', drawn_at: '2026-07-23T10:19:47Z' })], categories, []);
     expect(ladder[0]?.change).toBeNull();
     expect(ladder[0]?.previous).toBeNull();
   });
@@ -84,6 +102,7 @@ describe('buildLadder', () => {
         round({ round_number: 'mid', drawn_at: '2026-01-01T00:00:00Z', cutoff_crs: 450 }),
       ],
       categories,
+      [],
     );
     expect(ladder[0]?.latest.round_number).toBe('new');
     expect(ladder[0]?.previous?.round_number).toBe('mid');
@@ -96,6 +115,7 @@ describe('buildLadder', () => {
         round({ round_number: 'b', drawn_at: '2026-08-19T12:35:37Z', category_code: 'french' }),
       ],
       categories,
+      [],
     );
     expect(ladder.map((entry) => entry.key)).toStrictEqual(['french', 'trades']);
   });
@@ -104,12 +124,13 @@ describe('buildLadder', () => {
     const ladder = buildLadder(
       [round({ round_number: '1', drawn_at: '2026-08-19T12:35:37Z', category_code: 'brand-new-stream' })],
       categories,
+      [],
     );
     expect(ladder[0]?.label).toBe('brand-new-stream');
   });
 
   it('returns nothing for no rounds', () => {
-    expect(buildLadder([], categories)).toStrictEqual([]);
+    expect(buildLadder([], categories, [])).toStrictEqual([]);
   });
 
   it('does not confuse 91a and 91b, which parseInt would collapse', () => {
@@ -119,23 +140,25 @@ describe('buildLadder', () => {
         round({ round_number: '91b', drawn_at: '2019-02-20T01:00:00Z', cutoff_crs: 332 }),
       ],
       categories,
+      [],
     );
     expect(ladder[0]?.roundCount).toBe(2);
     expect(ladder[0]?.latest.round_number).toBe('91b');
   });
 });
 
-describe('movement across mixed programs', () => {
-  // Round 435 was a Provincial Nominee Program draw at 760 and round 436 a
-  // Canadian Experience Class draw at 523, both stored as round_type 'program'.
-  // Differencing them produced a headline "-237" that described nothing: a
-  // nomination is worth 600 points on its own, so the two are different scales.
-  const programRounds: DrawRound[] = [
+describe('program streams split by program code', () => {
+  // Round 436 was a Canadian Experience Class draw at 523 and round 435 a
+  // Provincial Nominee Program draw at 760 - both round_type 'program', now
+  // carrying distinct program_code values. They must land in separate,
+  // comparable streams rather than being differenced against each other.
+  const rounds: DrawRound[] = [
     round({
       round_number: '436',
       drawn_at: '2026-08-18T10:13:44Z',
       round_type: 'program',
       category_code: null,
+      program_code: 'cec',
       cutoff_crs: 523,
     }),
     round({
@@ -143,33 +166,60 @@ describe('movement across mixed programs', () => {
       drawn_at: '2026-08-17T12:33:42Z',
       round_type: 'program',
       category_code: null,
+      program_code: 'pnp',
       cutoff_crs: 760,
     }),
   ];
 
-  it('withholds movement for the program stream rather than printing a wrong number', () => {
-    const entry = buildLadder(programRounds, categories)[0];
-    expect(entry?.comparable).toBe(false);
-    expect(entry?.change).toBeNull();
+  it('keeps each program as its own comparable stream', () => {
+    const ladder = buildLadder(rounds, categories, programs);
+    expect(ladder.map((entry) => entry.key)).toStrictEqual(['cec', 'pnp']);
+    expect(ladder.every((entry) => entry.comparable)).toBe(true);
   });
 
-  it('still reports the stream, its latest cut-off and its history', () => {
-    // Withholding the comparison must not cost the 186 rounds behind it.
-    const entry = buildLadder(programRounds, categories)[0];
-    expect(entry?.latest.cutoff_crs).toBe(523);
-    expect(entry?.roundCount).toBe(2);
-    expect(entry?.previous?.round_number).toBe('435');
+  it('labels each program stream from the programs table', () => {
+    const ladder = buildLadder(rounds, categories, programs);
+    expect(ladder.find((entry) => entry.key === 'cec')?.label).toBe('Canadian Experience Class');
+    expect(ladder.find((entry) => entry.key === 'pnp')?.label).toBe('Provincial Nominee Program');
   });
 
-  it('keeps computing movement for streams that are like for like', () => {
-    const entry = buildLadder(
+  it('computes real movement within one program across two of its rounds', () => {
+    const ladder = buildLadder(
       [
-        round({ round_number: '437', drawn_at: '2026-08-19T12:35:37Z', cutoff_crs: 382 }),
-        round({ round_number: '433', drawn_at: '2026-08-06T11:29:10Z', cutoff_crs: 391 }),
+        ...rounds,
+        round({
+          round_number: '297',
+          drawn_at: '2026-06-01T00:00:00Z',
+          round_type: 'program',
+          category_code: null,
+          program_code: 'cec',
+          cutoff_crs: 500,
+        }),
       ],
       categories,
-    )[0];
-    expect(entry?.comparable).toBe(true);
-    expect(entry?.change).toBe(-9);
+      programs,
+    );
+    const cec = ladder.find((entry) => entry.key === 'cec');
+    expect(cec?.change).toBe(23);
+    expect(cec?.comparable).toBe(true);
+  });
+});
+
+describe('program rounds without a program code yet', () => {
+  it('falls back to the generic, non-comparable program bucket', () => {
+    const rounds: DrawRound[] = [
+      round({
+        round_number: '1', drawn_at: '2026-08-18T10:13:44Z',
+        round_type: 'program', category_code: null, program_code: null, cutoff_crs: 523,
+      }),
+      round({
+        round_number: '2', drawn_at: '2026-08-17T12:33:42Z',
+        round_type: 'program', category_code: null, program_code: null, cutoff_crs: 760,
+      }),
+    ];
+    const entry = buildLadder(rounds, categories, [])[0];
+    expect(entry?.key).toBe('program');
+    expect(entry?.comparable).toBe(false);
+    expect(entry?.change).toBeNull();
   });
 });

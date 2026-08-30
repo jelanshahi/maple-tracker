@@ -1,6 +1,6 @@
 import { formatChange, formatDate, formatInteger } from '../../src/format.ts';
 import { buildLadder } from '../../src/ladder.ts';
-import { fetchCategories, fetchRounds } from '../../src/queries.ts';
+import { fetchCategories, fetchPrograms, fetchRounds } from '../../src/queries.ts';
 import { createReadClient } from '../../src/supabase.ts';
 import styles from '../ui.module.css';
 
@@ -21,8 +21,12 @@ function changeCell(entry: { comparable: boolean; change: number | null }): stri
 
 export default async function CategoriesPage() {
   const client = createReadClient();
-  const [rounds, categories] = await Promise.all([fetchRounds(client), fetchCategories(client)]);
-  const ladder = buildLadder(rounds, categories);
+  const [rounds, categories, programs] = await Promise.all([
+    fetchRounds(client),
+    fetchCategories(client),
+    fetchPrograms(client),
+  ]);
+  const ladder = buildLadder(rounds, categories, programs);
 
   return (
     <>
@@ -32,12 +36,6 @@ export default async function CategoriesPage() {
         stream&rsquo;s latest round against its own previous round, never against another stream
         &mdash; a category cut-off and a program cut-off are not comparable numbers. Streams that
         have not been drawn in a long time still appear, with the date they last ran.
-      </p>
-      <p className={styles.lede}>
-        Program-specific rounds show no movement because IRCC draws Canadian Experience Class and
-        Provincial Nominee Program candidates under that one heading, and their cut-offs are hundreds
-        of points apart &mdash; a provincial nomination is worth 600 points by itself. Differencing
-        one against the other would produce a number that looks precise and means nothing.
       </p>
 
       <div className={styles.tableWrap}>
