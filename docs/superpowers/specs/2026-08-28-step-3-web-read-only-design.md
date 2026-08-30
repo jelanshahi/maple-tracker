@@ -17,11 +17,15 @@ A small Next.js site that reads `draw_rounds` and `categories` and renders four 
 |---|---|
 | `/` | What was the last draw, and is this data current? |
 | `/rounds` | The full published history. |
+| `/rounds/[roundNumber]` | This one round, and the one comparison that is fair to make about it. |
 | `/categories` | The cut-off ladder — where each stream's line currently sits. |
 
-*(A `/rounds/[roundNumber]` detail route was in the first draft of this spec and was cut before
-implementation. §9 lists three things; a detail page was a fourth. §7's "every number links to its
-source" means IRCC's own page, which every row already links to directly.)*
+*(This route was cut from an earlier draft of this section on the grounds that every row already
+links to IRCC directly, and then built anyway on 2026-08-30 — the cut was recorded here and nowhere
+else, while §4, §5, §10 and `CLAUDE.md`'s definition of done all still required it. It earns its
+place on the argument the cut missed: movement against the previous round **of the same stream** is
+not derivable from any table on the other three routes, and after the `program_code` split it is a
+real number for program rounds rather than a withheld one.)*
 
 No accounts, no calculator, no news, no charts, no alerts. Those are steps 4 and later.
 

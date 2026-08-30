@@ -53,6 +53,25 @@ function byDrawnAtDescending(a: DrawRound, b: DrawRound): number {
   return b.drawn_at.localeCompare(a.drawn_at);
 }
 
+/**
+ * The round a given round should be compared against: the most recent round of
+ * the same stream drawn strictly before it.
+ *
+ * Strictly before, by timestamp rather than by position, because round_number
+ * is text and not monotonic - 91a and 91b are one day's two rounds - so
+ * "the row above this one" is not a definition that survives contact with the
+ * data. A round is never its own predecessor even when another round shares its
+ * instant.
+ */
+export function previousInStream(rounds: readonly DrawRound[], round: DrawRound): DrawRound | null {
+  const key = streamKey(round);
+  return (
+    rounds
+      .filter((other) => streamKey(other) === key && other.drawn_at < round.drawn_at)
+      .sort(byDrawnAtDescending)[0] ?? null
+  );
+}
+
 function groupByStream(rounds: readonly DrawRound[]): Map<string, DrawRound[]> {
   const groups = new Map<string, DrawRound[]>();
   for (const round of rounds) {

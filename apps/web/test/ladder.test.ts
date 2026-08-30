@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildLadder, streamKey } from '../src/ladder.ts';
+import { buildLadder, previousInStream, streamKey } from '../src/ladder.ts';
 import type { Category, DrawRound, Program } from '../src/rows.ts';
 
 function round(overrides: Partial<DrawRound> & Pick<DrawRound, 'round_number' | 'drawn_at'>): DrawRound {
@@ -221,5 +221,60 @@ describe('program rounds without a program code yet', () => {
     expect(entry?.key).toBe('program');
     expect(entry?.comparable).toBe(false);
     expect(entry?.change).toBeNull();
+  });
+});
+
+describe('previousInStream', () => {
+  // What the round detail page needs: the round this one should be compared
+  // against, which is the previous round of the same stream and never simply
+  // the previous round overall.
+  const rounds: DrawRound[] = [
+    round({ round_number: '437', drawn_at: '2026-08-19T12:35:37Z', cutoff_crs: 382 }),
+    round({
+      round_number: '436', drawn_at: '2026-08-18T10:13:44Z',
+      round_type: 'program', category_code: null, program_code: 'cec', cutoff_crs: 523,
+    }),
+    round({ round_number: '433', drawn_at: '2026-08-06T11:29:10Z', cutoff_crs: 391 }),
+    round({
+      round_number: '297', drawn_at: '2026-06-01T00:00:00Z',
+      round_type: 'program', category_code: null, program_code: 'cec', cutoff_crs: 500,
+    }),
+  ];
+
+  it('skips over rounds of other streams', () => {
+    const target = rounds[0];
+    if (target === undefined) throw new Error('fixture');
+    // 436 is newer than 433 but belongs to the CEC stream, not french.
+    expect(previousInStream(rounds, target)?.round_number).toBe('433');
+  });
+
+  it('finds the previous round of a program stream', () => {
+    const target = rounds[1];
+    if (target === undefined) throw new Error('fixture');
+    expect(previousInStream(rounds, target)?.round_number).toBe('297');
+  });
+
+  it('returns null for the oldest round of its stream', () => {
+    const target = rounds[3];
+    if (target === undefined) throw new Error('fixture');
+    expect(previousInStream(rounds, target)).toBeNull();
+  });
+
+  it('sorts unsorted input rather than trusting the caller', () => {
+    const target = rounds[0];
+    if (target === undefined) throw new Error('fixture');
+    expect(previousInStream([...rounds].reverse(), target)?.round_number).toBe('433');
+  });
+
+  it('does not confuse 91a and 91b, which parseInt would collapse', () => {
+    const a = round({ round_number: '91a', drawn_at: '2019-02-20T00:00:00Z', cutoff_crs: 457 });
+    const b = round({ round_number: '91b', drawn_at: '2019-02-20T01:00:00Z', cutoff_crs: 332 });
+    expect(previousInStream([a, b], b)?.round_number).toBe('91a');
+    expect(previousInStream([a, b], a)).toBeNull();
+  });
+
+  it('ignores a round drawn at the same instant rather than comparing it to itself', () => {
+    const first = round({ round_number: 'x', drawn_at: '2026-01-01T00:00:00Z' });
+    expect(previousInStream([first], first)).toBeNull();
   });
 });

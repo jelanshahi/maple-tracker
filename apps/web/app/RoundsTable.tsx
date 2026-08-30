@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { describeRoundType, formatDate, formatDateTime, formatInteger, streamLabel } from '../src/format.ts';
 import type { DrawRound } from '../src/rows.ts';
 import styles from './ui.module.css';
@@ -36,7 +37,11 @@ export function RoundsTable({
             const label = streamLabel(round, streamLabels);
             return (
               <tr key={round.round_number}>
-                <td>{round.round_number}</td>
+                <td>
+                  <Link href={`/rounds/${encodeURIComponent(round.round_number)}`}>
+                    {round.round_number}
+                  </Link>
+                </td>
                 <td>{formatDate(round.drawn_at)}</td>
                 <td>{describeRoundType(round.round_type, label)}</td>
                 <td className={styles.numeric}>{formatInteger(round.cutoff_crs)}</td>
