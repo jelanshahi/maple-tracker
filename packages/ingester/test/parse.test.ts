@@ -56,9 +56,16 @@ describe('parseRoundsPayload', () => {
   });
 
   it('classifies rounds and only gives category rounds a category', () => {
-    expect(find('437')).toMatchObject({ round_type: 'category', category_code: 'french' });
-    expect(find('436')).toMatchObject({ round_type: 'program', category_code: null });
-    expect(find('294')).toMatchObject({ round_type: 'general', category_code: null });
+    expect(find('437')).toMatchObject({ round_type: 'category', category_code: 'french', program_code: null });
+    expect(find('436')).toMatchObject({ round_type: 'program', category_code: null, program_code: 'cec' });
+    expect(find('294')).toMatchObject({ round_type: 'general', category_code: null, program_code: null });
+  });
+
+  it('names each of the four programs from its own drawName', () => {
+    expect(find('436').program_code).toBe('cec');  // Canadian Experience Class
+    expect(find('435').program_code).toBe('pnp');  // Provincial Nominee Program
+    expect(find('91a').program_code).toBe('fst');  // Federal Skilled Trades
+    expect(find('240').program_code).toBe('fsw');  // Federal Skilled Worker
   });
 
   it('maps a renamed stream onto one stable code', () => {

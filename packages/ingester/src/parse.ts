@@ -15,6 +15,7 @@ export type CandidateRound = {
   drawn_at: string;
   round_type: 'general' | 'program' | 'category';
   category_code: string | null;
+  program_code: string | null;
   cutoff_crs: number;
   invitations: number;
   tie_break_at: string | null;
@@ -88,6 +89,7 @@ function toCandidate(raw: unknown): ParseOutcome {
       drawn_at: drawnAt,
       round_type: classification.roundType,
       category_code: classification.categoryCode,
+      program_code: classification.programCode,
       cutoff_crs: cutoffCrs,
       invitations,
       // Null when IRCC publishes no tie-break, or publishes one without a year.
