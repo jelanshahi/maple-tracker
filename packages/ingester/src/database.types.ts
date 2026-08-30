@@ -42,6 +42,7 @@ export type Database = {
           drawn_at: string
           ingested_at: string
           invitations: number
+          program_code: string | null
           raw: Json
           round_number: string
           round_type: string
@@ -54,6 +55,7 @@ export type Database = {
           drawn_at: string
           ingested_at?: string
           invitations: number
+          program_code?: string | null
           raw: Json
           round_number: string
           round_type: string
@@ -66,6 +68,7 @@ export type Database = {
           drawn_at?: string
           ingested_at?: string
           invitations?: number
+          program_code?: string | null
           raw?: Json
           round_number?: string
           round_type?: string
@@ -78,6 +81,13 @@ export type Database = {
             columns: ["category_code"]
             isOneToOne: false
             referencedRelation: "categories"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "draw_rounds_program_code_fkey"
+            columns: ["program_code"]
+            isOneToOne: false
+            referencedRelation: "programs"
             referencedColumns: ["code"]
           },
         ]
@@ -166,6 +176,27 @@ export type Database = {
           captured_on?: string
           id?: number
           source_url?: string
+        }
+        Relationships: []
+      }
+      programs: {
+        Row: {
+          active_from: string
+          active_to: string | null
+          code: string
+          label: string
+        }
+        Insert: {
+          active_from: string
+          active_to?: string | null
+          code: string
+          label: string
+        }
+        Update: {
+          active_from?: string
+          active_to?: string | null
+          code?: string
+          label?: string
         }
         Relationships: []
       }

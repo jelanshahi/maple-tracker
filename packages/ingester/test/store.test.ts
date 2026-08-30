@@ -45,6 +45,7 @@ const round = (roundNumber: string): CandidateRound => ({
   drawn_at: '2026-08-19T12:35:37.000Z',
   round_type: 'general',
   category_code: null,
+  program_code: null,
   cutoff_crs: 500,
   invitations: 1000,
   tie_break_at: null,
