@@ -134,6 +134,42 @@ export async function upsertRounds(store: Store, rounds: readonly CandidateRound
   return rounds.length;
 }
 
+export type ProgramBackfillRow = Pick<
+  Database['public']['Tables']['draw_rounds']['Row'],
+  'round_number' | 'drawn_at' | 'round_type' | 'category_code' | 'cutoff_crs' | 'invitations' | 'tie_break_at' | 'source_url' | 'raw'
+>;
+
+const PROGRAM_BACKFILL_COLUMNS =
+  'round_number, drawn_at, round_type, category_code, cutoff_crs, invitations, tie_break_at, source_url, raw';
+
+/**
+ * Program rounds that still need a program_code, for the one-off backfill.
+ * Reads the whole row (not just round_number/raw) because supabase-js's
+ * upsert typing requires every column the generated Insert type marks
+ * required - see the Task 7 design note above.
+ */
+export async function loadProgramRoundsMissingCode(store: Store): Promise<ProgramBackfillRow[]> {
+  const rows = must(
+    await store.from('draw_rounds').select(PROGRAM_BACKFILL_COLUMNS)
+      .eq('round_type', 'program').is('program_code', null),
+    'read program rounds missing a program code',
+  );
+  return rows;
+}
+
+/** One call for the whole batch, same shape as upsertRounds. */
+export async function writeProgramCodeBackfill(
+  store: Store,
+  rows: readonly (ProgramBackfillRow & { program_code: string })[],
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  must(
+    await store.from('draw_rounds').upsert([...rows], { onConflict: 'round_number' }).select('round_number'),
+    'write program code backfill',
+  );
+  return rows.length;
+}
+
 export async function quarantine(
   store: Store,
   runId: number,

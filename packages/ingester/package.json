@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "ingest": "node --env-file-if-exists=../../.env bin/ingest.ts"
+    "ingest": "node --env-file-if-exists=../../.env bin/ingest.ts",
+    "backfill:program-codes": "node --env-file-if-exists=../../.env bin/backfill-program-codes.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.112.3",

@@ -12,7 +12,10 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { closeRun, latestSnapshotHash, loadConfig, quarantine, upsertRounds } from '../src/store.ts';
+import {
+  closeRun, latestSnapshotHash, loadConfig, loadProgramRoundsMissingCode,
+  quarantine, upsertRounds, writeProgramCodeBackfill,
+} from '../src/store.ts';
 import type { Store } from '../src/store.ts';
 import type { CandidateRound } from '../src/parse.ts';
 
@@ -30,7 +33,7 @@ function fakeStore(result: { data: unknown; error: { message: string } | null })
   const builder: Record<string, unknown> = {
     then: (resolve: (value: unknown) => void) => resolve(result),
   };
-  for (const method of ['insert', 'update', 'select', 'eq', 'order', 'limit', 'upsert', 'single']) {
+  for (const method of ['insert', 'update', 'select', 'eq', 'is', 'order', 'limit', 'upsert', 'single']) {
     builder[method] = (...args: readonly unknown[]) => {
       calls.push({ table, method, args });
       return builder;
@@ -201,5 +204,52 @@ describe('closeRun', () => {
   it('throws when a write claims success but returns nothing', async () => {
     const { store } = fakeStore({ data: null, error: null });
     await expect(closeRun(store, 9, { status: 'ok' })).rejects.toThrow(/returned no data/);
+  });
+});
+
+const programBackfillRow = {
+  round_number: '436',
+  drawn_at: '2026-08-18T10:13:44.000Z',
+  round_type: 'program',
+  category_code: null,
+  cutoff_crs: 523,
+  invitations: 3500,
+  tie_break_at: null,
+  source_url: 'https://www.canada.ca/example',
+  raw: { drawName: 'Canadian Experience Class' },
+};
+
+describe('loadProgramRoundsMissingCode', () => {
+  it('selects program rounds with no program code yet', async () => {
+    const { store, calls } = fakeStore({ data: [programBackfillRow], error: null });
+    const rows = await loadProgramRoundsMissingCode(store);
+
+    expect(rows).toEqual([programBackfillRow]);
+    const select = calls.find((call) => call.method === 'select');
+    expect(select?.table).toBe('draw_rounds');
+    expect(select?.args).toEqual([
+      'round_number, drawn_at, round_type, category_code, cutoff_crs, invitations, tie_break_at, source_url, raw',
+    ]);
+    expect(calls.find((call) => call.method === 'eq')?.args).toEqual(['round_type', 'program']);
+    expect(calls.find((call) => call.method === 'is')?.args).toEqual(['program_code', null]);
+  });
+});
+
+describe('writeProgramCodeBackfill', () => {
+  it('writes whole rows with program_code set, in one batched upsert keyed on round_number', async () => {
+    const { store, calls } = fakeStore({ data: [{ round_number: '436' }], error: null });
+    const written = await writeProgramCodeBackfill(store, [{ ...programBackfillRow, program_code: 'cec' }]);
+
+    expect(written).toBe(1);
+    const upsert = calls.find((call) => call.method === 'upsert');
+    expect(upsert?.table).toBe('draw_rounds');
+    expect(upsert?.args[1]).toEqual({ onConflict: 'round_number' });
+    expect(upsert?.args[0]).toEqual([{ ...programBackfillRow, program_code: 'cec' }]);
+  });
+
+  it('writes nothing for an empty batch', async () => {
+    const { store, calls } = fakeStore({ data: [], error: null });
+    expect(await writeProgramCodeBackfill(store, [])).toBe(0);
+    expect(calls).toEqual([]);
   });
 });
