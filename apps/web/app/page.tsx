@@ -1,5 +1,5 @@
-import { describeRoundType, formatDate, formatDateTime, formatInteger } from '../src/format.ts';
-import { fetchCategories, fetchRounds } from '../src/queries.ts';
+import { describeRoundType, formatDate, formatDateTime, formatInteger, streamLabel } from '../src/format.ts';
+import { fetchCategories, fetchPrograms, fetchRounds } from '../src/queries.ts';
 import { createReadClient } from '../src/supabase.ts';
 import { RoundsTable } from './RoundsTable.tsx';
 import styles from './ui.module.css';
@@ -10,16 +10,22 @@ const RECENT_COUNT = 12;
 
 export default async function LatestPage() {
   const client = createReadClient();
-  const [rounds, categories] = await Promise.all([fetchRounds(client), fetchCategories(client)]);
-  const categoryLabels = new Map(categories.map((category) => [category.code, category.label]));
+  const [rounds, categories, programs] = await Promise.all([
+    fetchRounds(client),
+    fetchCategories(client),
+    fetchPrograms(client),
+  ]);
+  const streamLabels = new Map<string, string>([
+    ...categories.map((category) => [category.code, category.label] as const),
+    ...programs.map((program) => [program.code, program.label] as const),
+  ]);
   const latest = rounds[0];
 
   if (latest === undefined) {
     return <p>No rounds have been ingested yet.</p>;
   }
 
-  const categoryLabel =
-    latest.category_code === null ? null : categoryLabels.get(latest.category_code) ?? latest.category_code;
+  const latestLabel = streamLabel(latest, streamLabels);
 
   return (
     <>
@@ -31,7 +37,7 @@ export default async function LatestPage() {
 
       <section className={styles.card} aria-labelledby="latest-heading">
         <h2 id="latest-heading">
-          Round {latest.round_number} &middot; {describeRoundType(latest.round_type, categoryLabel)}
+          Round {latest.round_number} &middot; {describeRoundType(latest.round_type, latestLabel)}
         </h2>
         <div className={styles.headline}>
           <div className={styles.metric}>
@@ -58,7 +64,7 @@ export default async function LatestPage() {
       </section>
 
       <h2>Recent rounds</h2>
-      <RoundsTable rounds={rounds.slice(0, RECENT_COUNT)} categoryLabels={categoryLabels} />
+      <RoundsTable rounds={rounds.slice(0, RECENT_COUNT)} streamLabels={streamLabels} />
     </>
   );
 }

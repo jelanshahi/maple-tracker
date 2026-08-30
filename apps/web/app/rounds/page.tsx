@@ -1,5 +1,5 @@
 import { formatDate, formatInteger } from '../../src/format.ts';
-import { fetchCategories, fetchRounds } from '../../src/queries.ts';
+import { fetchCategories, fetchPrograms, fetchRounds } from '../../src/queries.ts';
 import { createReadClient } from '../../src/supabase.ts';
 import { RoundsTable } from '../RoundsTable.tsx';
 import styles from '../ui.module.css';
@@ -12,8 +12,15 @@ export const metadata = {
 
 export default async function RoundsPage() {
   const client = createReadClient();
-  const [rounds, categories] = await Promise.all([fetchRounds(client), fetchCategories(client)]);
-  const categoryLabels = new Map(categories.map((category) => [category.code, category.label]));
+  const [rounds, categories, programs] = await Promise.all([
+    fetchRounds(client),
+    fetchCategories(client),
+    fetchPrograms(client),
+  ]);
+  const streamLabels = new Map<string, string>([
+    ...categories.map((category) => [category.code, category.label] as const),
+    ...programs.map((program) => [program.code, program.label] as const),
+  ]);
   const oldest = rounds.at(-1);
 
   return (
@@ -25,7 +32,7 @@ export default async function RoundsPage() {
         {formatInteger(rounds.length)} rounds, newest first. Ordered by draw date rather than round
         number, because IRCC has published rounds numbered 91a and 91b.
       </p>
-      <RoundsTable rounds={rounds} categoryLabels={categoryLabels} />
+      <RoundsTable rounds={rounds} streamLabels={streamLabels} />
     </>
   );
 }

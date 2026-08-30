@@ -1,4 +1,4 @@
-import { describeRoundType, formatDate, formatDateTime, formatInteger } from '../src/format.ts';
+import { describeRoundType, formatDate, formatDateTime, formatInteger, streamLabel } from '../src/format.ts';
 import type { DrawRound } from '../src/rows.ts';
 import styles from './ui.module.css';
 
@@ -12,10 +12,10 @@ import styles from './ui.module.css';
  */
 export function RoundsTable({
   rounds,
-  categoryLabels,
+  streamLabels,
 }: {
   rounds: readonly DrawRound[];
-  categoryLabels: ReadonlyMap<string, string>;
+  streamLabels: ReadonlyMap<string, string>;
 }) {
   return (
     <div className={styles.tableWrap}>
@@ -33,7 +33,7 @@ export function RoundsTable({
         </thead>
         <tbody>
           {rounds.map((round) => {
-            const label = round.category_code === null ? null : categoryLabels.get(round.category_code) ?? round.category_code;
+            const label = streamLabel(round, streamLabels);
             return (
               <tr key={round.round_number}>
                 <td>{round.round_number}</td>

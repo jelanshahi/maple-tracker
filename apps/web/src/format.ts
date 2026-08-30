@@ -77,6 +77,25 @@ export function formatChange(change: number | null): string {
   return change > 0 ? `+${formatInteger(change)}` : formatInteger(change);
 }
 
+/**
+ * The human name for the stream a round belongs to, or null when it names
+ * neither a category nor a program and only its round type is left to describe
+ * it.
+ *
+ * Categories and programs are looked up in one map because their code spaces
+ * are disjoint, which is the same assumption buildLadder already makes when it
+ * merges them. An unseeded code renders as itself: IRCC adds streams faster
+ * than the seed migrations do, and inventing a label would be inventing a fact.
+ */
+export function streamLabel(
+  round: { category_code: string | null; program_code: string | null },
+  labels: ReadonlyMap<string, string>,
+): string | null {
+  const code = round.category_code ?? round.program_code;
+  if (code === null) return null;
+  return labels.get(code) ?? code;
+}
+
 export function describeRoundType(roundType: string, categoryLabel: string | null): string {
   if (categoryLabel !== null) return categoryLabel;
   return roundType === 'general' ? 'General (all programs)' : 'Program-specific';
