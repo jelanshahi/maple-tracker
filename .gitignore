@@ -26,3 +26,8 @@ Thumbs.db
 
 # Supabase CLI scratch state
 supabase/.temp/
+
+# Claude Code local state. This holds git worktrees, each a full checkout with
+# its own node_modules and .next - `git add .` without this rule tries to
+# commit the entire tree into itself.
+.claude/
