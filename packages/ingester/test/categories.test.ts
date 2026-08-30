@@ -3,14 +3,14 @@ import { classifyRound } from '../src/categories.ts';
 
 describe('classifyRound', () => {
   it.each([
-    ['No Program Specified',       'general'],
-    ['General',                    'general'],
-    ['Canadian Experience Class',  'program'],
-    ['Provincial Nominee Program', 'program'],
-    ['Federal Skilled Worker',     'program'],
-    ['Federal Skilled Trades',     'program'],
-  ])('classifies %s as a %s round with no category', (drawName, roundType) => {
-    expect(classifyRound(drawName)).toEqual({ roundType, categoryCode: null });
+    ['No Program Specified',       'general', null],
+    ['General',                    'general', null],
+    ['Canadian Experience Class',  'program', 'cec'],
+    ['Provincial Nominee Program', 'program', 'pnp'],
+    ['Federal Skilled Worker',     'program', 'fsw'],
+    ['Federal Skilled Trades',     'program', 'fst'],
+  ])('classifies %s as a %s round with program code %s', (drawName, roundType, programCode) => {
+    expect(classifyRound(drawName)).toEqual({ roundType, categoryCode: null, programCode });
   });
 
   // "Federal Skilled Trades" contains "trade". It must not fall through to the
@@ -38,7 +38,7 @@ describe('classifyRound', () => {
     ['Senior managers with Canadian Work Experience, 2026-Version 1', 'senior-managers'],
     ['Skilled Military Recruits, 2026-Version 1',                  'military'],
   ])('maps %s to the %s category', (drawName, categoryCode) => {
-    expect(classifyRound(drawName)).toEqual({ roundType: 'category', categoryCode });
+    expect(classifyRound(drawName)).toEqual({ roundType: 'category', categoryCode, programCode: null });
   });
 
   it('returns null for an unknown stream so the row is quarantined, not guessed', () => {

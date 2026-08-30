@@ -13,16 +13,21 @@
 export type RoundClassification = {
   roundType: 'general' | 'program' | 'category';
   categoryCode: string | null;
+  programCode: string | null;
 };
 
-/** Rounds that name a program or no program at all, rather than a category. */
-const NON_CATEGORY_NAMES = new Map<string, 'general' | 'program'>([
-  ['no program specified', 'general'],
-  ['general', 'general'],
-  ['canadian experience class', 'program'],
-  ['provincial nominee program', 'program'],
-  ['federal skilled worker', 'program'],
-  ['federal skilled trades', 'program'],
+/**
+ * Rounds that name a program or no program at all, rather than a category.
+ * Program codes here match the seed rows in
+ * supabase/migrations/20260828210000_programs.sql — they must stay in step.
+ */
+const NON_CATEGORY_NAMES = new Map<string, { roundType: 'general' | 'program'; programCode: string | null }>([
+  ['no program specified', { roundType: 'general', programCode: null }],
+  ['general', { roundType: 'general', programCode: null }],
+  ['canadian experience class', { roundType: 'program', programCode: 'cec' }],
+  ['provincial nominee program', { roundType: 'program', programCode: 'pnp' }],
+  ['federal skilled worker', { roundType: 'program', programCode: 'fsw' }],
+  ['federal skilled trades', { roundType: 'program', programCode: 'fst' }],
 ]);
 
 /**
@@ -68,12 +73,12 @@ export function classifyRound(drawName: string): RoundClassification | null {
 
   const nonCategory = NON_CATEGORY_NAMES.get(normalised);
   if (nonCategory !== undefined) {
-    return { roundType: nonCategory, categoryCode: null };
+    return { roundType: nonCategory.roundType, categoryCode: null, programCode: nonCategory.programCode };
   }
 
   for (const [probe, code] of CATEGORY_PROBES) {
     if (normalised.includes(probe)) {
-      return { roundType: 'category', categoryCode: code };
+      return { roundType: 'category', categoryCode: code, programCode: null };
     }
   }
 
