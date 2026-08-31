@@ -4,10 +4,12 @@ Maple Tracker — Express Entry draw tracking, IRCC news, and a CRS calculator.
 
 `ARCHITECTURE.md` is the source of truth for schema, data sources, and scoring rules. Read it before making any structural decision. This file is how we work together.
 
-**Current scope: step 4 of the build order** — the CRS calculator: `crs-rules` wired into the web app, scored client-side, still no accounts. Steps 1 (ingester), 2 (CRS rules) and 3 (read-only web) are complete.
+**Current scope: step 5 of the build order** — accounts and saved profiles: magic-link sign-in, one saved profile per account, and the score history that falls out of saving. Steps 1 (ingester), 2 (CRS rules), 3 (read-only web) and 4 (calculator) are complete.
 
-The design for this step is `docs/superpowers/specs/2026-08-30-step-4-calculator-design.md`.
-Step 3's is `docs/superpowers/specs/2026-08-28-step-3-web-read-only-design.md`.
+**This is the first step that stores personal data.** A `Profile` is personal information under PIPEDA, Law 25 and GDPR. Read the Security section below before touching anything under `app/account/`, `app/history/` or `src/accountQueries.ts`.
+
+The design for this step is `docs/superpowers/specs/2026-08-31-step-5-accounts-design.md`.
+Earlier steps: `2026-08-30-step-4-calculator-design.md`, `2026-08-28-step-3-web-read-only-design.md`.
 
 ---
 
@@ -15,7 +17,7 @@ Step 3's is `docs/superpowers/specs/2026-08-28-step-3-web-read-only-design.md`.
 
 These override any general instinct about how a project "should" be structured.
 
-**Build only what is asked for.** If `ARCHITECTURE.md` §9 doesn't list it in the current step, it's out of scope. Do not add it "for later." Explicitly out of scope right now: accounts and saved profiles (step 5), the `assessments` table, score-over-time, eligibility assessment, any HTTP API, auth, alerts, email, news ingestion, provincial data, processing times, pool-distribution charts, admin tooling, Docker, deployment and hosting config, monorepo tooling (turbo/nx), CI beyond `test` + `typecheck`.
+**Build only what is asked for.** If `ARCHITECTURE.md` §9 doesn't list it in the current step, it's out of scope. Do not add it "for later." Explicitly out of scope right now: news ingestion and the review console (step 6), email alerts (step 7), mobile (step 8), eligibility assessment, several named profiles per user, sharing a profile, OAuth providers, any HTTP API beyond the one auth callback route, provincial data, processing times, pool-distribution charts, admin tooling, Docker, deployment and hosting config, monorepo tooling (turbo/nx), CI beyond `test` + `typecheck`.
 
 **No speculative abstraction.** Do not write an interface, base class, factory, adapter, or generic helper until the same shape appears a **third** time. Two similar functions are fine. A `BaseSource` class with one subclass is not. A `utils.ts` of one-off helpers is not.
 
@@ -70,8 +72,11 @@ packages/ingester/           all I/O lives here
   test/
 
 apps/web/                    Next.js App Router, anon key only, server-rendered reads
-  app/                       routes: /, /rounds, /rounds/[roundNumber], /categories, /calculator
-  app/calculator/            the only client components in the app
+  proxy.ts                   refreshes the session cookie (Next 16 name for middleware)
+  app/                       routes: /, /rounds, /rounds/[roundNumber], /categories,
+                             /calculator, /account, /history, /auth/confirm
+  app/calculator/            client components + the save/load server actions
+  app/account/               sign in, sign out, delete account
   src/env.ts                 zod-validated SUPABASE_URL + SUPABASE_ANON_KEY
   src/supabase.ts            anon client, server-only            (I/O edge)
   src/queries.ts             the reads, returning validated rows  (I/O edge)
@@ -79,7 +84,11 @@ apps/web/                    Next.js App Router, anon key only, server-rendered 
   src/ladder.ts              pure: rounds -> cut-off ladder
   src/gap.ts                 pure: score vs the latest cut-off per stream
   src/profile.ts             pure: labels for the codes crs-rules works in
-  src/profileForm.ts         pure: form state -> Profile
+  src/profileForm.ts         pure: what the form holds
+  src/profileMapping.ts      pure: form state <-> Profile, both directions
+  src/scoreHistory.ts        pure: assessments -> dated rows with deltas
+  src/authClient.ts          anon client bound to request cookies      (I/O edge)
+  src/accountQueries.ts      the per-user reads and writes             (I/O edge)
   src/format.ts              pure: dates, timezone labels, movement, stream labels
   test/
 
@@ -89,8 +98,12 @@ supabase/migrations/         timestamped .sql, never edited after commit
 `crs-rules` must never import from `ingester`, and must never import Supabase.
 
 `apps/web` must never import from `ingester`. It reads the database directly with the anon key,
-through the public-read RLS policies. It imports `crs-rules` as of step 4, and scores in the
-browser — a Profile must never reach the server, the database, or a log.
+through the public-read RLS policies, and imports `crs-rules` as of step 4.
+
+**The browser never talks to Supabase.** Sign-in, sign-out, save, load and delete all run in Server
+Actions, and the magic link lands on one route handler; the session lives in httpOnly cookies. That
+is what lets the anon key stay server-side, which is not negotiable — see Security. Scoring still
+runs in the browser, and a Profile reaches the server only when the user presses save.
 
 ---
 
@@ -170,8 +183,12 @@ Requirements, not suggestions.
 - The rule-set condition language exists precisely so rules can be data without being code. Keep it tiny.
 
 **Personal data**
-- Nothing in the current scope stores personal data, but `Profile` describes it and it will be persisted later.
-- Never log a `Profile`. Never include one in an error message or exception. No analytics in `crs-rules`.
+- **As of step 5 this project stores personal data.** A `Profile` is personal information under PIPEDA, Quebec Law 25 and GDPR.
+- Never log a `Profile`. Never include one in an error message or exception. No analytics in `crs-rules`, and none anywhere else.
+- Store the minimum. `assessments` records a total and a rule set id, never a copy of the answers.
+- Every per-user row is reachable only by its owner, enforced by RLS scoped to `auth.uid()`. Never add an `anon` policy to `saved_profiles` or `assessments`.
+- Erasure is a right, not a feature. `/account` deletes the account, the saved profile and the whole history, and the deletion cascades.
+- Answers leave the browser only when the user presses save, and the calculator says so in words that stay true.
 
 **Dependencies**
 - Pin exact versions — no `^`. Commit the lockfile. `pnpm audit` runs in the test script.
@@ -269,6 +286,16 @@ No stray `console.log` left in committed code — if it's worth keeping it's a s
 - The estimate disclaimer, the IRCC rule-set citation and the not-a-forecast wording all render
 - `pnpm typecheck`, `pnpm test` and `pnpm build` all clean
 
+**Step 5 — accounts**
+- A magic link signs you in, and no password exists anywhere in the system
+- The anon key still never reaches the browser, asserted by scanning the built client bundle
+- Saving stores the profile and records one assessment; loading restores the answers and the same score
+- `/history` shows dated scores with movement, and withholds movement across a rule-set change
+- Deleting an account removes the profile and the history, and cascades from `auth.users`
+- One account cannot see another's rows, verified by signing in as each in turn
+- Signed out, `/calculator` behaves exactly as it did in step 4
+- `pnpm typecheck`, `pnpm test` and `pnpm build` all clean
+
 ---
 
 ## Don't
@@ -284,6 +311,9 @@ No stray `console.log` left in committed code — if it's worth keeping it's a s
 - Don't `select('*')` from `draw_rounds`. The `raw` column is the whole source payload.
 - Don't send, store, or log a `Profile`. It never leaves the browser — no fetch, no localStorage, no URL.
 - Don't phrase a cut-off comparison as a prediction or as advice about someone's case.
+- Don't put the anon key in the browser. No `NEXT_PUBLIC_`, no `createBrowserClient`, no session in `localStorage`.
+- Don't add an `anon` policy to `saved_profiles` or `assessments`, and don't make a per-user page ISR-cached.
+- Don't apply a migration with the Supabase MCP tool. Use `supabase db push` — see HANDOFF.md.
 
 ---
 

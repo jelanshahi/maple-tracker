@@ -159,6 +159,24 @@ create table quarantined_rows (
   created_at  timestamptz not null default now(),
   resolved_at timestamptz
 );
+
+-- Step 5. The first tables here holding personal data, and the first that are
+-- not public-read. One saved CRS profile per account; the history is the totals.
+create table saved_profiles (
+  user_id    uuid primary key references auth.users(id) on delete cascade,
+  profile    jsonb       not null,
+  updated_at timestamptz not null default now()
+);
+
+create table assessments (
+  id          bigserial   primary key,
+  user_id     uuid        not null references auth.users(id) on delete cascade,
+  rule_set_id text        not null,
+  total       integer     not null,
+  created_at  timestamptz not null default now(),
+  constraint assessment_total_plausible check (total between 0 and 1200)
+);
+create index assessments_user_created_idx on assessments (user_id, created_at desc);
 ```
 
 Choices to not "improve":
@@ -171,6 +189,9 @@ Choices to not "improve":
 - `raw` keeps the original payload for every row. Non-negotiable — it's how a parser bug gets fixed without re-fetching history.
 - The `check` constraints sit *behind* application validation, not instead of it. Both exist.
 - `categories.active_to` is nullable because categories are retired and re-introduced. Not a boolean.
+- `assessments` stores a **total and a rule set id, never a snapshot of the answers**. A copy of the profile per save would multiply the personal data held, for a page that renders only a date, a score and a movement. Data minimisation is an obligation under PIPEDA, Law 25 and GDPR, not a preference.
+- `assessments.rule_set_id` is deliberately **not** a foreign key to `rule_sets`. That table is unpopulated — both rule sets live in code, in `packages/crs-rules` — so the constraint would reject every insert. Revisit when rule sets are actually stored.
+- `saved_profiles`, not `profiles`: the Supabase convention reserves `profiles` for account metadata, and this holds a CRS profile. One row per user; saving overwrites.
 - `rule_sets.params` holds a whole rule set as one document. Do not normalise it into a key-value table — it is read whole, versioned whole, never partially updated.
 
 ### Row Level Security
@@ -188,6 +209,9 @@ alter table news_items       enable row level security;
 alter table source_snapshots enable row level security;
 alter table ingestion_runs   enable row level security;
 alter table quarantined_rows enable row level security;
+-- Per-user tables: RLS on, and every policy scoped to auth.uid().
+alter table saved_profiles   enable row level security;
+alter table assessments      enable row level security;
 
 create policy "public read draws"      on draw_rounds    for select to anon, authenticated using (true);
 create policy "public read categories" on categories     for select to anon, authenticated using (true);
@@ -200,6 +224,16 @@ create policy "public read verification time"
   on ingestion_runs for select to anon, authenticated using (status in ('ok','no_change'));
 revoke select on ingestion_runs from anon, authenticated;
 grant  select (finished_at) on ingestion_runs to anon, authenticated;
+
+-- Accounts. Note the role: authenticated only, and scoped to the caller's own
+-- rows. There is deliberately no anon policy on either table.
+create policy "own saved profile" on saved_profiles for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own assessments read"   on assessments for select to authenticated using (auth.uid() = user_id);
+create policy "own assessments write"  on assessments for insert to authenticated with check (auth.uid() = user_id);
+create policy "own assessments delete" on assessments for delete to authenticated using (auth.uid() = user_id);
+revoke all on saved_profiles from anon;
+revoke all on assessments    from anon;
 ```
 
 `source_snapshots` and `quarantined_rows`: RLS enabled, **no policies at all**. Service role only. Operational data is not public.
@@ -215,6 +249,18 @@ written reason — see `20260828193000_public_verification_time.sql`, which also
 alternatives that were rejected.
 
 Note the `rule_sets` policy — proposed rule sets stay server-side until launch. Do not add a public policy for them.
+
+`saved_profiles` and `assessments` are the first tables here that are not public-read, and the only ones
+holding personal data. **Never add an `anon` policy to either.** There is no `update` policy on
+`assessments` either: a recorded estimate is a fact about a moment, and editing one would make the
+history a record of nothing. Deleting is allowed, because erasure is a right; rewriting is not the same
+thing.
+
+Account deletion runs through `public.delete_own_account()`, a `security definer` function that deletes
+`auth.users where id = auth.uid()` and cascades. It exists because `apps/web` holds only the anon key and
+cannot call the admin API. Its `set search_path = ''` and fully-qualified table name are load-bearing:
+without them a `security definer` function is a privilege escalation waiting for someone to create a
+table with the right name.
 
 `news_items` predates this schema: it holds 100 real IRCC news items from November 2024 to July 2026,
 harvested by an earlier abandoned attempt and deliberately kept by `20260823090000_drop_legacy.sql`
@@ -456,6 +502,8 @@ and each is a defect that would have caused silent data loss or a permanently fa
 | 4 | `round_type = 'program'` treated as one stream | it is a bucket of several, now split by `program_code` | CEC and PNP rounds were both stored as `program` with a null `category_code`, and nothing distinguished them outside `raw.drawName`. Their cut-offs are ~520 and ~760, because a nomination is worth 600 points on its own, so differencing consecutive rounds reported a movement of **-237 points** that describes nothing. **Resolved 2026-08-30** by the `programs` table and `draw_rounds.program_code`: `classifyRound` already recognised the program in order to assign `round_type` at all and merely discarded it, so the 186 existing rows were backfilled from their own stored `raw.drawName` without re-fetching canada.ca. Each program is now its own comparable stream. |
 | 7 | "display in device local time" | UTC, explicitly labelled | Pages are server rendered and ISR-cached, so the server neither knows nor may bake in one viewer's timezone. A mislabelled tie-break time decides who thinks they were invited. Device-local rendering needs a client component and is deferred; every timestamp says UTC in the meantime. §7 itself still said "device local time" long after this row corrected it — fixed **2026-08-30**. |
 | 4 | `ingestion_runs` has "no policies at all" | one column, one policy | **2026-08-30.** `20260828193000_public_verification_time.sql` granted anon `select (finished_at)` on successful runs so the staleness banner in §5 could exist at all. The prose still forbade the policy the schema already had. The grant is narrower than the sentence it replaces, but "no policies" was simply untrue. |
+| 7 | "Nothing you type here is sent anywhere or saved" on /calculator | true only until you save | **2026-08-31.** Step 4 shipped that promise in bold, and step 5 gives it up on purpose: an account exists to keep your answers. Scoring still runs entirely in the browser and nothing leaves the page unless the save button is pressed, so the wording now says that instead. A promise that quietly stops being true is worse than one that was never made. |
+| 8 | `assessments` "eventually monthly partitioning" | not yet, and note why | **2026-08-31.** The table exists as of step 5 with the `(user_id, created_at desc)` index §8 asked for. Partitioning stays a note: it holds four small columns per save, and a user saving weekly for a decade produces ~500 rows. |
 | 4 | schema block omitted `news_items` | it exists, with a public-read policy | **2026-08-30.** Kept deliberately by `20260823090000_drop_legacy.sql` — 100 real IRCC news items from Nov 2024 to Jul 2026 that may not be re-scrapable. Out of scope until step 6, but a table absent from the schema block is a table nobody remembers to check RLS on. |
 
 Confirmed **correct** as written, having been checked rather than assumed:
