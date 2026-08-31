@@ -1,8 +1,9 @@
 import { crsCurrent, profileSchema, score } from '@maple/crs-rules';
 import { describe, expect, it } from 'vitest';
 import {
-  emptyForm, emptyLanguageForm, emptySpouseForm, hasAnySpouseDetail, isPartlyFilled, toLanguageTest, toProfile,
+  emptyForm, emptyLanguageForm, emptySpouseForm, hasAnySpouseDetail, isPartlyFilled,
 } from '../src/profileForm.ts';
+import { toLanguageTest, toProfile } from '../src/profileMapping.ts';
 import type { LanguageForm, ProfileForm } from '../src/profileForm.ts';
 
 const clb = (level: number): LanguageForm => ({
