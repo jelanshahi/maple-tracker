@@ -12,15 +12,18 @@
  * the network or the Supabase client, so the promise is checked rather than
  * merely described.
  *
- * Nothing is persisted. A refresh clears it, deliberately: saved profiles need
- * accounts, which is step 5.
+ * Nothing is persisted on its own. Signed out, a refresh clears everything and
+ * the answers never leave the page. Signed in, the save control below is the
+ * only thing that sends them anywhere, and only when pressed.
  */
 import { crsCurrent, score } from '@maple/crs-rules';
 import { useState } from 'react';
 import type { CutoffMark } from '../../src/gap.ts';
-import { emptyForm, toProfile } from '../../src/profileForm.ts';
+import { emptyForm } from '../../src/profileForm.ts';
+import { toProfile } from '../../src/profileMapping.ts';
 import { ApplicantFieldsets } from './ApplicantFieldsets.tsx';
 import { CutoffGap } from './CutoffGap.tsx';
+import { SaveProfile } from './SaveProfile.tsx';
 import { ScoreBreakdown } from './ScoreBreakdown.tsx';
 import { SpouseFieldset } from './SpouseFieldset.tsx';
 import styles from '../ui.module.css';
@@ -49,6 +52,7 @@ export function CalculatorForm({ cutoffs }: { cutoffs: readonly CutoffMark[] }) 
 
       <div className={styles.results}>
         <ScoreBreakdown result={result} ruleSet={crsCurrent} />
+        <SaveProfile form={form} onLoad={setForm} />
         <CutoffGap total={result.total} cutoffs={cutoffs} />
       </div>
     </div>

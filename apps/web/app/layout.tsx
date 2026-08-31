@@ -52,9 +52,11 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             </Link>
             <nav className={styles.nav}>
               <Link href="/">Latest</Link>
-              <Link href="/rounds">History</Link>
+              <Link href="/rounds">Rounds</Link>
               <Link href="/categories">Cut-off ladder</Link>
               <Link href="/calculator">Calculator</Link>
+              <Link href="/history">My scores</Link>
+              <Link href="/account">Account</Link>
             </nav>
           </header>
 

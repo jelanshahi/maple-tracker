@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { buildLadder } from '../../src/ladder.ts';
 import { toCutoffMarks } from '../../src/gap.ts';
 import { fetchCategories, fetchPrograms, fetchRounds } from '../../src/queries.ts';
@@ -40,9 +41,10 @@ export default async function CalculatorPage() {
       </p>
 
       <p className={styles.privacy}>
-        <strong>Nothing you type here is sent anywhere or saved.</strong> The calculation runs
-        entirely in your browser, and your answers are gone when you close the tab. This site has no
-        accounts, and nothing on this page reaches its database.
+        <strong>Your answers stay in your browser while you work.</strong> The calculation runs
+        entirely on this page. Nothing is sent anywhere unless you choose to save it to an{' '}
+        <Link href="/account">account</Link>, and without one this page has nowhere to send it at
+        all — close the tab and your answers are gone.
       </p>
 
       <p className={styles.muted}>

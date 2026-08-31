@@ -84,7 +84,10 @@ describe('client components cannot send a profile anywhere', () => {
   });
 
   it('never imports the database client or the environment it needs', () => {
-    expect(clientFindingsFor(/from\s+['"].*\/(supabase|queries|env)\.ts['"]/)).toStrictEqual([]);
+    // authClient and accountQueries joined this list in step 5. Both construct
+    // or use a Supabase client, so both would drag the anon key into the bundle.
+    expect(clientFindingsFor(/from\s+['"].*\/(supabase|queries|env|authClient|accountQueries)\.ts['"]/))
+      .toStrictEqual([]);
   });
 
   it('never imports supabase-js, which would put a database call in the browser bundle', () => {
@@ -96,7 +99,38 @@ describe('client components cannot send a profile anywhere', () => {
   });
 
   it('never writes to browser storage, which would leave a profile on a shared computer', () => {
-    // Saved profiles need accounts and a consent story, which is step 5.
+    // Accounts are the supported way to keep answers, and they are opt-in and
+    // deletable. Browser storage is neither, on a device that may be shared.
     expect(clientFindingsFor(/localStorage|sessionStorage|indexedDB/)).toStrictEqual([]);
+  });
+});
+
+/**
+ * A CRS Profile is personal information under PIPEDA, Law 25 and GDPR, and
+ * ARCHITECTURE.md section 10 is blunt about it: never log a profile, never put
+ * one in an error message. Since step 5 the app stores them, so the rule stops
+ * being theoretical.
+ *
+ * This looks for a profile reaching console at all. It is a coarse check on
+ * purpose - the point is that nothing in this app has any business logging one,
+ * so the safe number of matches is zero rather than "only the harmless ones".
+ */
+describe('a profile is never logged', () => {
+  it('logs no variable named like a profile', () => {
+    expect(findingsFor(/console\.\w+\([^)]*\bprofile\b/i)).toStrictEqual([]);
+  });
+
+  it('logs no form state, which is a profile by another name', () => {
+    expect(findingsFor(/console\.\w+\([^)]*\bform\b/i)).toStrictEqual([]);
+  });
+
+  /**
+   * CLAUDE.md: no stray console.log in committed code. If it is worth keeping
+   * it is a structured event with a name, and apps/web has no such events -
+   * every log here would be a debugging leftover, on pages handling personal
+   * data.
+   */
+  it('leaves no console call behind at all', () => {
+    expect(findingsFor(/\bconsole\.\w+\(/)).toStrictEqual([]);
   });
 });
