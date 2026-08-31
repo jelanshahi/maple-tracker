@@ -4,9 +4,10 @@ Maple Tracker — Express Entry draw tracking, IRCC news, and a CRS calculator.
 
 `ARCHITECTURE.md` is the source of truth for schema, data sources, and scoring rules. Read it before making any structural decision. This file is how we work together.
 
-**Current scope: step 3 of the build order** — the read-only web client: latest draw, history, cut-off ladder. Steps 1 (ingester) and 2 (CRS rules) are complete. No accounts, and no calculator UI — wiring `crs-rules` into the web app is step 4.
+**Current scope: step 4 of the build order** — the CRS calculator: `crs-rules` wired into the web app, scored client-side, still no accounts. Steps 1 (ingester), 2 (CRS rules) and 3 (read-only web) are complete.
 
-The design for this step is `docs/superpowers/specs/2026-08-28-step-3-web-read-only-design.md`.
+The design for this step is `docs/superpowers/specs/2026-08-30-step-4-calculator-design.md`.
+Step 3's is `docs/superpowers/specs/2026-08-28-step-3-web-read-only-design.md`.
 
 ---
 
@@ -14,7 +15,7 @@ The design for this step is `docs/superpowers/specs/2026-08-28-step-3-web-read-o
 
 These override any general instinct about how a project "should" be structured.
 
-**Build only what is asked for.** If `ARCHITECTURE.md` §9 doesn't list it in the current step, it's out of scope. Do not add it "for later." Explicitly out of scope right now: the CRS calculator UI (step 4), accounts, any HTTP API, auth, alerts, email, news ingestion, provincial data, processing times, pool-distribution charts, admin tooling, Docker, deployment and hosting config, monorepo tooling (turbo/nx), CI beyond `test` + `typecheck`.
+**Build only what is asked for.** If `ARCHITECTURE.md` §9 doesn't list it in the current step, it's out of scope. Do not add it "for later." Explicitly out of scope right now: accounts and saved profiles (step 5), the `assessments` table, score-over-time, eligibility assessment, any HTTP API, auth, alerts, email, news ingestion, provincial data, processing times, pool-distribution charts, admin tooling, Docker, deployment and hosting config, monorepo tooling (turbo/nx), CI beyond `test` + `typecheck`.
 
 **No speculative abstraction.** Do not write an interface, base class, factory, adapter, or generic helper until the same shape appears a **third** time. Two similar functions are fine. A `BaseSource` class with one subclass is not. A `utils.ts` of one-off helpers is not.
 
@@ -68,14 +69,17 @@ packages/ingester/           all I/O lives here
   bin/backfill-program-codes.ts  thin entrypoint, one-off
   test/
 
-apps/web/                    Next.js App Router, read-only, anon key only
-  app/                       routes: /, /rounds, /rounds/[roundNumber], /categories
+apps/web/                    Next.js App Router, anon key only, server-rendered reads
+  app/                       routes: /, /rounds, /rounds/[roundNumber], /categories, /calculator
+  app/calculator/            the only client components in the app
   src/env.ts                 zod-validated SUPABASE_URL + SUPABASE_ANON_KEY
   src/supabase.ts            anon client, server-only            (I/O edge)
   src/queries.ts             the reads, returning validated rows  (I/O edge)
   src/rows.ts                zod row schemas + row types
   src/ladder.ts              pure: rounds -> cut-off ladder
-  src/history.ts             pure: filtering, grouping, deltas
+  src/gap.ts                 pure: score vs the latest cut-off per stream
+  src/profile.ts             pure: labels for the codes crs-rules works in
+  src/profileForm.ts         pure: form state -> Profile
   src/format.ts              pure: dates, timezone labels, movement, stream labels
   test/
 
@@ -85,7 +89,8 @@ supabase/migrations/         timestamped .sql, never edited after commit
 `crs-rules` must never import from `ingester`, and must never import Supabase.
 
 `apps/web` must never import from `ingester`. It reads the database directly with the anon key,
-through the public-read RLS policies. It may import `crs-rules` — but not until step 4.
+through the public-read RLS policies. It imports `crs-rules` as of step 4, and scores in the
+browser — a Profile must never reach the server, the database, or a log.
 
 ---
 
@@ -254,6 +259,16 @@ No stray `console.log` left in committed code — if it's worth keeping it's a s
 - No service role key is reachable from `apps/web`, asserted by a test rather than by inspection
 - `pnpm typecheck`, `pnpm test` and `pnpm build` all clean
 
+**Step 4 — calculator**
+- `/calculator` scores a profile entirely in the browser, against `crs-current`
+- The `theoretical maximum, single` fixture entered into the live form renders its hand-verified total
+- An empty profile scores 0 and warns for every unanswered factor; nothing is inferred or defaulted
+- Declaring an accompanying spouse with no details raises the with-spouse-scale warning
+- No client component can reach the network, the database, or browser storage, asserted by a test
+- No warning or factor explanation names an internal input, asserted by a test
+- The estimate disclaimer, the IRCC rule-set citation and the not-a-forecast wording all render
+- `pnpm typecheck`, `pnpm test` and `pnpm build` all clean
+
 ---
 
 ## Don't
@@ -267,6 +282,8 @@ No stray `console.log` left in committed code — if it's worth keeping it's a s
 - Don't write a network call in a test. Ingester tests use recorded fixture payloads checked into the repo, and web tests use recorded row fixtures — never a live database.
 - Don't import the service role key, or anything from `packages/ingester`, into `apps/web`.
 - Don't `select('*')` from `draw_rounds`. The `raw` column is the whole source payload.
+- Don't send, store, or log a `Profile`. It never leaves the browser — no fetch, no localStorage, no URL.
+- Don't phrase a cut-off comparison as a prediction or as advice about someone's case.
 
 ---
 
