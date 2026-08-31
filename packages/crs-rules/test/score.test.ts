@@ -60,12 +60,14 @@ describe('missing inputs', () => {
     const result = score(blank, crsCurrent);
     expect(result.total).toBe(0);
     expect(result.warnings.length).toBeGreaterThan(0);
-    for (const warning of result.warnings) expect(warning).toMatch(/not supplied/);
+    for (const warning of result.warnings) expect(warning).toMatch(/scored 0 because/);
   });
 
-  it('warns per missing factor, naming the input', () => {
+  // Warnings are shown to users, so they are matched on the factor label the
+  // page renders - not on the input name the rule set happens to use.
+  it('warns per missing factor, naming the factor', () => {
     const result = score({ ...blank, age: 29 }, crsCurrent);
-    expect(result.warnings.some((w) => w.includes('educationLevel'))).toBe(true);
+    expect(result.warnings.some((w) => w.startsWith('Level of education:'))).toBe(true);
     // Age was supplied, so it must not be warned about. Matched on the factor
     // label rather than a bare substring - "language" contains "age".
     expect(result.warnings.some((w) => w.startsWith('Age:'))).toBe(false);
@@ -79,7 +81,7 @@ describe('missing inputs', () => {
     const noChoice = complete({ firstOfficialLanguage: null });
     const result = score(noChoice, crsCurrent);
     expect(result.factors.find((f) => f.key === 'firstOfficialLanguage')?.points).toBe(0);
-    expect(result.warnings.some((w) => w.includes('firstOfficial'))).toBe(true);
+    expect(result.warnings.some((w) => w.startsWith('First official language:'))).toBe(true);
   });
 });
 

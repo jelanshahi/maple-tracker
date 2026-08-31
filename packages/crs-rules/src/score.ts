@@ -33,7 +33,7 @@ function scoreFactorSection(
     const outcome = evaluateFactor(factorKey, table, inputs, hasSpouse);
     factors.push(outcome.score);
     if (outcome.missingInput) {
-      warnings.push(`${table.label}: scored 0 because ${table.input} was not supplied`);
+      warnings.push(`${table.label}: scored 0 because it was not answered`);
     }
   }
 
@@ -58,8 +58,11 @@ function scoreSkillTransfer(
     const row = readScalar(inputs, combination.rowInput);
     const column = readScalar(inputs, combination.columnInput);
     if (row === null || column === null) {
-      const missing = row === null ? combination.rowInput : combination.columnInput;
-      warnings.push(`${combination.label}: scored 0 because ${missing} was not supplied`);
+      // Both halves of the pair are named in the label, and each is also its
+      // own factor with its own warning, so saying which half is missing here
+      // would repeat that in the rule set's own vocabulary rather than the
+      // user's.
+      warnings.push(`${combination.label}: scored 0 because one of the two answers it needs was not given`);
     }
     const points = row === null || column === null
       ? 0
@@ -69,7 +72,11 @@ function scoreSkillTransfer(
       key: combination.key,
       label: combination.label,
       points,
-      explanation: `${String(row)} with ${String(column)} scores ${points}`,
+      // Explanations are rendered to people. Interpolating a null row would put
+      // "null with null scores 0" on the page.
+      explanation: row === null || column === null
+        ? 'not answered, so nothing was scored'
+        : `${String(row)} with ${String(column)} scores ${points}`,
     });
     subTotals.set(combination.subCap, (subTotals.get(combination.subCap) ?? 0) + points);
   }

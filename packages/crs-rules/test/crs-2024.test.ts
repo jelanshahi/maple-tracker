@@ -74,7 +74,7 @@ describe('crs-2024 against crs-current', () => {
     const undeclared = complete({ jobOfferTier: null });
     const arranged = score(undeclared, crs2024).factors.find((factor) => factor.key === 'arrangedEmployment');
     expect(arranged?.points).toBe(0);
-    expect(score(undeclared, crs2024).warnings.some((w) => w.includes('jobOfferTier'))).toBe(true);
+    expect(score(undeclared, crs2024).warnings.some((w) => w.startsWith('Arranged employment:'))).toBe(true);
   });
 });
 

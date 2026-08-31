@@ -151,7 +151,7 @@ describe('the spouse declares their own first official language', () => {
     const undeclared = withSpouse({ ...frenchSpouse, firstOfficialLanguage: null });
     const result = score(undeclared, crsCurrent);
     expect(result.factors.find((f) => f.key === 'spouseLanguage')?.points).toBe(0);
-    expect(result.warnings.some((w) => w.includes('spouseFirstOfficial'))).toBe(true);
+    expect(result.warnings.some((w) => w.startsWith('Official language proficiency (spouse):'))).toBe(true);
   });
 });
 
