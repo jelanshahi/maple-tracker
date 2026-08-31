@@ -156,3 +156,167 @@
   margin: 0 0 0.6rem;
   max-width: 52rem;
 }
+
+/* ---- Calculator ---------------------------------------------------------
+ * Two columns on a wide screen, form beside results; one column below that.
+ * Same tokens as everything else - no new palette, no framework.
+ */
+
+.calculator {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+}
+
+@media (min-width: 62rem) {
+  .calculator {
+    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+  }
+
+  /* The results follow the form in the DOM, which is the reading order that
+     matters; on a wide screen they stay in view while the form is filled. */
+  .results {
+    position: sticky;
+    top: 1.5rem;
+  }
+}
+
+.form {
+  margin: 0;
+}
+
+.fieldset,
+.subFieldset {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 1rem 1.1rem;
+  margin: 0 0 1.25rem;
+  min-width: 0;
+}
+
+.subFieldset {
+  background: var(--bg);
+  margin: 0.75rem 0 0;
+}
+
+.fieldset legend,
+.subFieldset legend {
+  font-weight: 650;
+  padding: 0 0.35rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0 0 1rem;
+}
+
+.field:last-child {
+  margin-bottom: 0;
+}
+
+.field label {
+  font-weight: 550;
+}
+
+.field input[type='number'],
+.field select {
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+  width: 100%;
+  max-width: 26rem;
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-weight: 550;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* The four abilities read as one group rather than four unrelated questions. */
+.abilities {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem;
+}
+
+.abilities .field {
+  margin-bottom: 0.5rem;
+}
+
+.inlineWarning,
+.warnings {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  color: var(--warn-text);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+}
+
+.inlineWarning {
+  margin: 0.75rem 0 0;
+}
+
+.warnings {
+  margin: 1rem 0;
+}
+
+.warnings h3 {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+}
+
+.warnings p {
+  margin: 0 0 0.5rem;
+}
+
+.warnings ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+/* The estimate disclaimer. ARCHITECTURE.md section 7.2: once, clearly, on the
+   screen that shows the score - not a wall of legalese and not hidden. */
+.estimate {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.8rem;
+  margin: 1rem 0;
+}
+
+.privacy {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.8rem 1rem;
+  margin: 0 0 1.5rem;
+  max-width: 46rem;
+}
+
+.reset {
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+}
+
+.reset:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}

@@ -62,3 +62,41 @@ describe('apps/web boundaries', () => {
     expect(findingsFor(/\.select\(\s*['"`]\s*\*/)).toStrictEqual([]);
   });
 });
+
+/**
+ * The calculator's promise, asserted rather than trusted.
+ *
+ * A CRS Profile is personal information under PIPEDA, Law 25 and GDPR, and the
+ * calculator page tells the user in as many words that nothing they type is
+ * sent anywhere. That is only true while no client component can reach the
+ * network or the database - so this reads the source and checks, exactly as the
+ * service-role rule above is checked.
+ */
+const clientFiles = files.filter((file) => /(^|\n)\s*['"]use client['"]/.test(codeOf(file)));
+
+function clientFindingsFor(pattern: RegExp): string[] {
+  return clientFiles.filter((file) => pattern.test(codeOf(file))).map((file) => path.relative(appRoot, file));
+}
+
+describe('client components cannot send a profile anywhere', () => {
+  it('has client components to check, so a passing run means something', () => {
+    expect(clientFiles.length).toBeGreaterThan(3);
+  });
+
+  it('never imports the database client or the environment it needs', () => {
+    expect(clientFindingsFor(/from\s+['"].*\/(supabase|queries|env)\.ts['"]/)).toStrictEqual([]);
+  });
+
+  it('never imports supabase-js, which would put a database call in the browser bundle', () => {
+    expect(clientFindingsFor(/@supabase\/supabase-js/)).toStrictEqual([]);
+  });
+
+  it('never calls fetch, so a profile has no route off the page', () => {
+    expect(clientFindingsFor(/\bfetch\s*\(/)).toStrictEqual([]);
+  });
+
+  it('never writes to browser storage, which would leave a profile on a shared computer', () => {
+    // Saved profiles need accounts and a consent story, which is step 5.
+    expect(clientFindingsFor(/localStorage|sessionStorage|indexedDB/)).toStrictEqual([]);
+  });
+});
