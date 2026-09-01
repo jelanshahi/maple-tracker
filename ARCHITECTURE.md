@@ -262,6 +262,16 @@ cannot call the admin API. Its `set search_path = ''` and fully-qualified table 
 without them a `security definer` function is a privilege escalation waiting for someone to create a
 table with the right name.
 
+**Supabase's security linter flags this function, and the flag is expected.** `get_advisors` reports
+`authenticated_security_definer_function_executable`, because signed-in users can call a
+`security definer` function over the REST API. That is precisely what it is for: the function deletes
+exactly one row, `auth.users where id = auth.uid()`, so a caller can only ever delete themselves. Do
+not "fix" it by revoking execute or switching to `security invoker` — either change removes the only
+way this app can delete an account at all. The two `rls_enabled_no_policy` INFO lints on
+`source_snapshots` and `quarantined_rows` are deliberate in the same way: service role only, as above.
+The `auth_leaked_password_protection` warning does not apply, because there are no passwords in this
+system at all.
+
 `news_items` predates this schema: it holds 100 real IRCC news items from November 2024 to July 2026,
 harvested by an earlier abandoned attempt and deliberately kept by `20260823090000_drop_legacy.sql`
 because re-scraping that history may not be possible. Nothing reads or writes it — news ingestion is
