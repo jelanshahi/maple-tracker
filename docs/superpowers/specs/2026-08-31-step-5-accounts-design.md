@@ -1,7 +1,7 @@
 # Step 5 — Accounts and saved profiles
 
 Date: 2026-08-31
-Status: built; auth flow untested end to end pending Supabase dashboard configuration (§8)
+Status: built and verified end to end against the live project on 2026-09-01
 
 `ARCHITECTURE.md` §9 step 5: *"Accounts + saved profiles. Score-over-time falls
 out of this for free."*
@@ -114,8 +114,8 @@ Server Action says "you are signed out" if it needs to. `/account` and
 
 ## 7. Testing
 
-No live database, as always — the auth flow is the part tests cannot reach, and
-§8 says so plainly rather than implying coverage that does not exist.
+No live database, as always. The auth flow is the part automated tests cannot
+reach; §8 records what was exercised by hand instead.
 
 - `scoreHistory.test.ts` — ordering, deltas, the same-second tie-break, and the
   withheld movement across a rule-set change.
@@ -131,23 +131,42 @@ No live database, as always — the auth flow is the part tests cannot reach, an
 
 361 tests across 22 files.
 
-## 8. What is not verified, and why
+## 8. Verified against the live project, 2026-09-01
 
-The magic-link round trip has not been exercised. It needs three things only the
-project owner can set:
+Migration applied with `supabase db push` — 9 local files, 9 ledger rows, all
+timestamps matching. Never the MCP `apply_migration` tool, which stamps its own
+timestamp and breaks the ledger.
 
-1. **The magic link email template** must use `{{ .TokenHash }}` and point at
-   `/auth/confirm`. The stock template uses `{{ .ConfirmationURL }}`, which
-   returns tokens in the URL fragment — a browser-only flow this design
-   deliberately does not have.
-2. **Site URL and redirect allowlist** must include `http://localhost:3000`.
-3. **The migration is not applied.** The Supabase CLI is no longer linked
-   (`supabase/.temp` holds no project ref), and linking needs credentials.
-   `supabase db push` — never the MCP `apply_migration` tool, which stamps its
-   own timestamp and breaks the ledger.
+| Check | Result |
+|---|---|
+| Magic link → signed in | works, with Supabase's **stock** email template |
+| Calculator total | 379, matching the `single, 29, bachelor, CLB 9` fixture |
+| Save | one `saved_profiles` row (14 keys), one `assessments` row |
+| History | `391 (+12)` over `379 (—)`, newest first |
+| Load | same answers, same score, on a fresh page load |
+| Sign out | session cleared; `/history` shows a prompt and no data |
+| Load while signed out | reports it, changes nothing |
+| RLS isolation | owner sees 1 profile / 2 assessments; **another signed-in user sees 0 / 0** |
+| `anon` against both tables | read, insert and rpc all refused |
+| Delete account | `auth.users` 1 → 0, and both tables cascaded to 0 |
 
-Until those are done, `/account` and `/history` render correctly signed out, and
-every path that touches the new tables is untested.
+### One correction the testing forced
+
+The email link arrives as `/auth/v1/verify?token=pkce_…&redirect_to=/auth/confirm`,
+which bounces back with **`?code=`**, not `?token_hash=`. That is what the stock
+template produces, and `@supabase/ssr` uses PKCE by default. The route now
+accepts both — see its header comment — so **no email template needs editing**,
+which removes the configuration step this document originally demanded.
+
+### Still unexercised
+
+- **The delete button itself.** Deletion was driven by calling
+  `delete_own_account()` as the authenticated user, which is exactly what the
+  button does, but the typed-confirmation UI was not clicked: the built-in email
+  sender hit its rate limit before a session could be re-established.
+- **Email delivery at any volume.** Custom SMTP is off, so Supabase's built-in
+  sender applies: a couple of messages an hour, only to project members. Enough
+  for testing and useless for real users. A provider is a deployment decision.
 
 ## 9. Done when
 
