@@ -4,12 +4,13 @@ Maple Tracker — Express Entry draw tracking, IRCC news, and a CRS calculator.
 
 `ARCHITECTURE.md` is the source of truth for schema, data sources, and scoring rules. Read it before making any structural decision. This file is how we work together.
 
-**Current scope: step 5 of the build order** — accounts and saved profiles: magic-link sign-in, one saved profile per account, and the score history that falls out of saving. Steps 1 (ingester), 2 (CRS rules), 3 (read-only web) and 4 (calculator) are complete.
+**Current scope: step 6 of the build order** — news and the review console: a nightly-runnable ingest of IRCC’s newsroom into a draft queue, human approval, and a public news page. Steps 1–5 are complete.
 
 **This is the first step that stores personal data.** A `Profile` is personal information under PIPEDA, Law 25 and GDPR. Read the Security section below before touching anything under `app/account/`, `app/history/` or `src/accountQueries.ts`.
 
-The design for this step is `docs/superpowers/specs/2026-08-31-step-5-accounts-design.md`.
-Earlier steps: `2026-08-30-step-4-calculator-design.md`, `2026-08-28-step-3-web-read-only-design.md`.
+The design for this step is `docs/superpowers/specs/2026-09-01-step-6-news-review-design.md`.
+Earlier steps: `2026-08-31-step-5-accounts-design.md`, `2026-08-30-step-4-calculator-design.md`,
+`2026-08-28-step-3-web-read-only-design.md`.
 
 ---
 
@@ -17,7 +18,7 @@ Earlier steps: `2026-08-30-step-4-calculator-design.md`, `2026-08-28-step-3-web-
 
 These override any general instinct about how a project "should" be structured.
 
-**Build only what is asked for.** If `ARCHITECTURE.md` §9 doesn't list it in the current step, it's out of scope. Do not add it "for later." Explicitly out of scope right now: news ingestion and the review console (step 6), email alerts (step 7), mobile (step 8), eligibility assessment, several named profiles per user, sharing a profile, OAuth providers, any HTTP API beyond the one auth callback route, provincial data, processing times, pool-distribution charts, admin tooling, Docker, deployment and hosting config, monorepo tooling (turbo/nx), CI beyond `test` + `typecheck`.
+**Build only what is asked for.** If `ARCHITECTURE.md` §9 doesn't list it in the current step, it's out of scope. Do not add it "for later." Explicitly out of scope right now: email alerts (step 7), mobile (step 8), **scheduling** — `pnpm ingest:news` is a command, and the cron that calls it is a deployment decision — eligibility assessment, several named profiles per user, sharing a profile, OAuth providers, comments, any HTTP API beyond the one auth callback route, provincial data, processing times, pool-distribution charts, Docker, deployment and hosting config, monorepo tooling (turbo/nx), CI beyond `test` + `typecheck`.
 
 **No speculative abstraction.** Do not write an interface, base class, factory, adapter, or generic helper until the same shape appears a **third** time. Two similar functions are fine. A `BaseSource` class with one subclass is not. A `utils.ts` of one-off helpers is not.
 
@@ -67,7 +68,11 @@ packages/ingester/           all I/O lives here
   src/run.ts                 orchestration + top-level error handling
   src/backfillPrograms.ts    pure: rows -> program_code backfill plan
   src/runBackfillPrograms.ts orchestration for the one-off backfill
+  src/news.ts                pure: feed JSON -> candidate rows
+  src/newsStore.ts           insert-only news writes
+  src/runNews.ts             news orchestration
   bin/ingest.ts              thin entrypoint
+  bin/ingest-news.ts         thin entrypoint, news
   bin/backfill-program-codes.ts  thin entrypoint, one-off
   test/
 
@@ -77,6 +82,8 @@ apps/web/                    Next.js App Router, anon key only, server-rendered 
                              /calculator, /account, /history, /auth/confirm
   app/calculator/            client components + the save/load server actions
   app/account/               sign in, sign out, delete account
+  app/news/                  public: reviewed IRCC announcements
+  app/review/                editors only: the draft queue
   src/env.ts                 zod-validated SUPABASE_URL + SUPABASE_ANON_KEY
   src/supabase.ts            anon client, server-only            (I/O edge)
   src/queries.ts             the reads, returning validated rows  (I/O edge)
@@ -89,6 +96,9 @@ apps/web/                    Next.js App Router, anon key only, server-rendered 
   src/scoreHistory.ts        pure: assessments -> dated rows with deltas
   src/authClient.ts          anon client bound to request cookies      (I/O edge)
   src/accountQueries.ts      the per-user reads and writes             (I/O edge)
+  src/newsQueries.ts         news reads + the reviewer’s writes        (I/O edge)
+  src/newsRows.ts            zod row schemas + row types
+  src/tags.ts                pure: the controlled tag vocabulary
   src/format.ts              pure: dates, timezone labels, movement, stream labels
   test/
 
@@ -296,6 +306,14 @@ No stray `console.log` left in committed code — if it's worth keeping it's a s
 - Signed out, `/calculator` behaves exactly as it did in step 4
 - `pnpm typecheck`, `pnpm test` and `pnpm build` all clean
 
+**Step 6 — news and review**
+- `pnpm ingest:news` fills the queue; running it twice inserts nothing the second time
+- A rejected item does not come back on the next run
+- Drafts are invisible to anon and to signed-in non-editors, asserted against the database
+- `/review` 404s for anyone who is not an editor — no message confirming the console exists
+- Published items render on `/news` in IRCC’s own words, each linking to the release
+- `pnpm typecheck`, `pnpm test` and `pnpm build` all clean
+
 ---
 
 ## Don't
@@ -314,6 +332,10 @@ No stray `console.log` left in committed code — if it's worth keeping it's a s
 - Don't put the anon key in the browser. No `NEXT_PUBLIC_`, no `createBrowserClient`, no session in `localStorage`.
 - Don't add an `anon` policy to `saved_profiles` or `assessments`, and don't make a per-user page ISR-cached.
 - Don't apply a migration with the Supabase MCP tool. Use `supabase db push` — see HANDOFF.md.
+- Don't reword an IRCC headline or summary. They render verbatim beside a link to the release.
+- Don't write a policy that queries the table it protects. Use `public.is_editor()`; inline recurses.
+- Don't cache-bust the news API. An unknown query parameter makes it return zero entries silently.
+- Don't let news ingestion write to `ingestion_runs`. That table is what the staleness banner reads.
 
 ---
 

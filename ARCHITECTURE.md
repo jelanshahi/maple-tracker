@@ -212,6 +212,8 @@ alter table quarantined_rows enable row level security;
 -- Per-user tables: RLS on, and every policy scoped to auth.uid().
 alter table saved_profiles   enable row level security;
 alter table assessments      enable row level security;
+-- Editorial: RLS on, and the roster is not readable by anon at all.
+alter table editors          enable row level security;
 
 create policy "public read draws"      on draw_rounds    for select to anon, authenticated using (true);
 create policy "public read categories" on categories     for select to anon, authenticated using (true);
@@ -274,9 +276,47 @@ system at all.
 
 `news_items` predates this schema: it holds 100 real IRCC news items from November 2024 to July 2026,
 harvested by an earlier abandoned attempt and deliberately kept by `20260823090000_drop_legacy.sql`
-because re-scraping that history may not be possible. Nothing reads or writes it — news ingestion is
-step 6. It is listed here because it exists in the database and RLS must cover it, not because it is
-in scope.
+because re-scraping that history may not be possible. **Step 6 put it to work**, adding `status`,
+`reviewed_at` and `reviewed_by`, and an `editors` roster:
+
+```sql
+alter table news_items
+  add column status      text not null default 'draft',
+  add column reviewed_at timestamptz,
+  add column reviewed_by uuid references auth.users(id) on delete set null,
+  add constraint news_status_known check (status in ('draft','published','rejected'));
+create index news_status_published_idx on news_items (status, published_at desc);
+
+create table editors (
+  user_id  uuid primary key references auth.users(id) on delete cascade,
+  added_at timestamptz not null default now()
+);
+
+create policy "news_items published are public" on news_items for select to anon, authenticated
+  using (status = 'published');
+create policy "editors read every news item"    on news_items for select to authenticated using (public.is_editor());
+create policy "editors review news items"      on news_items for update to authenticated
+  using (public.is_editor()) with check (public.is_editor());
+create policy "editors see their own row"      on editors for select to authenticated
+  using (user_id = (select auth.uid()));
+```
+
+The things worth knowing about that block:
+
+- **IRCC's newsroom is not an Express Entry feed.** It carries everything the department does —
+  Canada Child Benefit payments, passport renewal, Francophone community projects. Publishing it
+  wholesale would bury the signal this site exists to provide, which is why §9 puts a human before
+  publish. The review console is the relevance filter, not ceremony.
+- `default 'draft'` is what put the 100 legacy rows into the queue. Nobody had reviewed them, so
+  'draft' is simply true; defaulting them to 'published' would have been a lie the schema told.
+- `reviewed_by` is `on delete set null`, not cascade. Deleting an editor's account must not delete
+  the news they approved — the decision outlives the account.
+- **`public.is_editor()` is a `security definer` function and has to be.** Writing the check inline as
+  `exists (select 1 from editors where user_id = auth.uid())` recurses: reading `editors` runs the
+  `editors` policy, which reads `editors`. See §11.
+- There is no insert or delete policy on `news_items`, and none at all on `editors`. Rows arrive only
+  from the ingester, which holds the service role; **adding an editor is a manual insert**, because
+  every self-service bootstrap is also a privilege-escalation path.
 
 ---
 
@@ -514,6 +554,9 @@ and each is a defect that would have caused silent data loss or a permanently fa
 | 4 | `ingestion_runs` has "no policies at all" | one column, one policy | **2026-08-30.** `20260828193000_public_verification_time.sql` granted anon `select (finished_at)` on successful runs so the staleness banner in §5 could exist at all. The prose still forbade the policy the schema already had. The grant is narrower than the sentence it replaces, but "no policies" was simply untrue. |
 | 7 | "Nothing you type here is sent anywhere or saved" on /calculator | true only until you save | **2026-08-31.** Step 4 shipped that promise in bold, and step 5 gives it up on purpose: an account exists to keep your answers. Scoring still runs entirely in the browser and nothing leaves the page unless the save button is pressed, so the wording now says that instead. A promise that quietly stops being true is worse than one that was never made. |
 | 8 | `assessments` "eventually monthly partitioning" | not yet, and note why | **2026-08-31.** The table exists as of step 5 with the `(user_id, created_at desc)` index §8 asked for. Partitioning stays a note: it holds four small columns per save, and a user saving weekly for a decade produces ~500 rows. |
+| 4 | `news_items` public read `using (true)` | `using (status = 'published')` | **2026-09-01.** Harmless while every row was a published IRCC item and nothing read them. The moment step 6 added drafts, that policy published every unreviewed item to the world — the opposite of what the review queue is for. Replaced rather than added alongside: RLS policies are ORed, so leaving the old one would have defeated the new one. |
+| 4 | editor checks written inline in the policy | `public.is_editor()`, `security definer` | **2026-09-01.** `using (exists (select 1 from editors where user_id = auth.uid()))` **on `editors` itself** recurses — reading the table runs the policy, which reads the table. Postgres raises "infinite recursion detected in policy for relation editors", and because the `news_items` editor policies evaluate the same subquery, every editor path failed rather than just the roster read. It survived the anon checks because anon has no privileges on `editors` and the public news policy is a plain status comparison, so neither ever evaluated the recursive rule; simulating a signed-in non-editor found it in one query. Fixed forward in `20260901021500_editors_no_recursion.sql`. |
+| 3 | newsroom is "an RSS/Atom feed" | there is a JSON endpoint, and it is better | **2026-09-01.** `api.io.canada.ca/io-server/gc/news/en/v2?...&format=json` returns `application/json` with entries shaped `{ link, teaser, publishedDate, title }`, so news needs no XML parser and no new dependency. Different host, hence a second allowlist entry — still Government of Canada. **It also must not be cache-busted**: appending `_=<timestamp>` makes it return zero entries rather than an error, because it reads unknown query parameters as filters. The rounds JSON still needs busting, so the two sources differ deliberately. |
 | 4 | schema block omitted `news_items` | it exists, with a public-read policy | **2026-08-30.** Kept deliberately by `20260823090000_drop_legacy.sql` — 100 real IRCC news items from Nov 2024 to Jul 2026 that may not be re-scrapable. Out of scope until step 6, but a table absent from the schema block is a table nobody remembers to check RLS on. |
 
 Confirmed **correct** as written, having been checked rather than assumed:
