@@ -55,6 +55,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               <Link href="/rounds">Rounds</Link>
               <Link href="/categories">Cut-off ladder</Link>
               <Link href="/calculator">Calculator</Link>
+              <Link href="/news">News</Link>
               <Link href="/history">My scores</Link>
               <Link href="/account">Account</Link>
             </nav>

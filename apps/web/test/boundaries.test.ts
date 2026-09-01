@@ -86,7 +86,7 @@ describe('client components cannot send a profile anywhere', () => {
   it('never imports the database client or the environment it needs', () => {
     // authClient and accountQueries joined this list in step 5. Both construct
     // or use a Supabase client, so both would drag the anon key into the bundle.
-    expect(clientFindingsFor(/from\s+['"].*\/(supabase|queries|env|authClient|accountQueries)\.ts['"]/))
+    expect(clientFindingsFor(/from\s+['"].*\/(supabase|queries|env|authClient|accountQueries|newsQueries)\.ts['"]/))
       .toStrictEqual([]);
   });
 
