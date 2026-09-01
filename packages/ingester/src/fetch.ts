@@ -1,18 +1,36 @@
 /**
- * The only outbound network call in the project.
+ * The only outbound network calls in the project.
  *
  * Every constraint here is a requirement from CLAUDE.md, not a preference.
- * The URL is a module constant: nothing from the database or from a parsed
+ * Both URLs are module constants: nothing from the database or from a parsed
  * response is ever interpolated into a fetch target, which is what closes the
  * SSRF surface outright.
+ *
+ * There are two callers and one implementation. CLAUDE.md allows two similar
+ * functions rather than a shared helper - but it permits duplication, it does
+ * not require it, and this is the allowlist, the size cap and the retry policy.
+ * Two copies of security code means a fix to one silently misses the other.
  */
 
 import { createHash } from 'node:crypto';
 
 /** Unlisted subdomains are rejected too. */
-const ALLOWED_HOSTS = new Set(['www.canada.ca']);
+const ALLOWED_HOSTS = new Set(['www.canada.ca', 'api.io.canada.ca']);
 
 const ROUNDS_URL = 'https://www.canada.ca/content/dam/ircc/documents/json/ee_rounds_123_en.json';
+
+/**
+ * IRCC's newsroom, as JSON rather than the Atom feed ARCHITECTURE.md section 3
+ * mentions - verified 2026-08-31 to return application/json with entries shaped
+ * { link, teaser, publishedDate, title }. JSON means no XML parser dependency.
+ *
+ * A different Government of Canada host, hence the second allowlist entry.
+ * `pick` bounds the response: the feed is newest-first and the ingester only
+ * ever needs what has appeared since it last ran.
+ */
+const NEWS_URL =
+  'https://api.io.canada.ca/io-server/gc/news/en/v2'
+  + '?dept=departmentofcitizenshipandimmigration&sort=publishedDate&orderBy=desc&pick=50&format=json';
 
 const TIMEOUT_MS = 15_000;
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -31,7 +49,7 @@ export class FetchNotRetryable extends Error {}
 
 /**
  * Exported so the allowlist can be tested directly. It is a security control,
- * and one whose failure mode is silent: with the URL a module constant it never
+ * and one whose failure mode is silent: with the URLs module constants it never
  * fires in normal operation, so nothing but a test would notice it breaking.
  */
 export function assertAllowedHost(rawUrl: string): void {
@@ -109,27 +127,35 @@ function backoffMs(attempt: number): number {
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Fetch the rounds payload, retrying only on 5xx and network errors.
+ * Fetch one document, retrying only on 5xx and network errors.
  *
  * `contactUrl` goes into the User-Agent. It is not decoration: the canada.ca CDN
  * answers 403 to a default agent, and identifying yourself on a government site
  * is the deal.
  *
- * Only one request is made per run, so no rate limiter is needed; the backoff
- * below already spaces retries well beyond one per second.
+ * One request per run per source, so no rate limiter is needed; the backoff
+ * already spaces retries well beyond one per second.
  */
-export async function fetchRoundsPayload(contactUrl: string): Promise<FetchedPayload> {
-  assertAllowedHost(ROUNDS_URL);
+async function fetchDocument(
+  canonicalUrl: string,
+  contactUrl: string,
+  { cacheBust }: { cacheBust: boolean },
+): Promise<FetchedPayload> {
+  assertAllowedHost(canonicalUrl);
   const userAgent = `MapleTracker/0.1 (+${contactUrl})`;
-  // Cache-buster: the JSON sits behind a CDN that would otherwise serve a stale copy.
-  const url = `${ROUNDS_URL}?_=${Date.now()}`;
+  // The rounds JSON is a static file behind a CDN that will happily serve a
+  // stale copy, so it needs a cache-buster. The news API must NOT have one:
+  // verified 2026-08-31 that appending `_=<timestamp>` makes it return zero
+  // entries rather than an error, because it reads unknown query parameters as
+  // filters. Do not "fix" the asymmetry by busting both.
+  const url = cacheBust ? `${canonicalUrl}${canonicalUrl.includes('?') ? '&' : '?'}_=${Date.now()}` : canonicalUrl;
 
   let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     try {
       const body = await attemptFetch(url, userAgent);
       return {
-        url: ROUNDS_URL,
+        url: canonicalUrl,
         body,
         contentHash: createHash('sha256').update(body).digest('hex'),
         fetchedAt: new Date().toISOString(),
@@ -140,5 +166,13 @@ export async function fetchRoundsPayload(contactUrl: string): Promise<FetchedPay
       if (attempt < MAX_ATTEMPTS) await sleep(backoffMs(attempt));
     }
   }
-  throw new Error(`rounds fetch failed after ${MAX_ATTEMPTS} attempts`, { cause: lastError });
+  throw new Error(`fetch of ${canonicalUrl} failed after ${MAX_ATTEMPTS} attempts`, { cause: lastError });
+}
+
+export function fetchRoundsPayload(contactUrl: string): Promise<FetchedPayload> {
+  return fetchDocument(ROUNDS_URL, contactUrl, { cacheBust: true });
+}
+
+export function fetchNewsPayload(contactUrl: string): Promise<FetchedPayload> {
+  return fetchDocument(NEWS_URL, contactUrl, { cacheBust: false });
 }

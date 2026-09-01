@@ -6,6 +6,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "ingest": "node --env-file-if-exists=../../.env bin/ingest.ts",
+    "ingest:news": "node --env-file-if-exists=../../.env bin/ingest-news.ts",
     "backfill:program-codes": "node --env-file-if-exists=../../.env bin/backfill-program-codes.ts"
   },
   "dependencies": {
