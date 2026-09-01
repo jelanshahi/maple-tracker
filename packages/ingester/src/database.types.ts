@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      assessments: {
+        Row: {
+          created_at: string
+          id: number
+          rule_set_id: string
+          total: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          rule_set_id: string
+          total: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          rule_set_id?: string
+          total?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           active_from: string
@@ -271,6 +295,24 @@ export type Database = {
         }
         Relationships: []
       }
+      saved_profiles: {
+        Row: {
+          profile: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          profile: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          profile?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       source_snapshots: {
         Row: {
           body: string
@@ -300,7 +342,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      delete_own_account: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
