@@ -116,6 +116,21 @@ export type Database = {
           },
         ]
       }
+      editors: {
+        Row: {
+          added_at: string
+          user_id: string
+        }
+        Insert: {
+          added_at?: string
+          user_id: string
+        }
+        Update: {
+          added_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       ingestion_runs: {
         Row: {
           error: string | null
@@ -151,6 +166,9 @@ export type Database = {
           external_id: string
           id: number
           published_at: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
           summary: string | null
           tags: string[]
           title: string
@@ -160,6 +178,9 @@ export type Database = {
           external_id: string
           id?: number
           published_at: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
           summary?: string | null
           tags?: string[]
           title: string
@@ -169,6 +190,9 @@ export type Database = {
           external_id?: string
           id?: number
           published_at?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
           summary?: string | null
           tags?: string[]
           title?: string
