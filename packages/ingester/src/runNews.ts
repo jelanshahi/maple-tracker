@@ -46,6 +46,18 @@ export async function runNews(env: NodeJS.ProcessEnv): Promise<NewsRunResult> {
     throw new Error('news feed contained no entries; the payload shape has probably changed');
   }
 
+  // Entries that all failed validation are the same failure wearing a different
+  // hat, and the one the entry count cannot see: rename `link` to `href` and
+  // every entry is rejected while outcomes.length stays at 50. Without this the
+  // run logs {rejected: 50, inserted: 0} and exits 0, which to a nightly cron is
+  // indistinguishable from a quiet night - so the queue stops filling and
+  // nothing ever says why.
+  if (items.length === 0) {
+    throw new Error(
+      `news feed had ${outcomes.length} entries and none parsed; the entry shape has probably changed`,
+    );
+  }
+
   const inserted = await insertNewItems(store, items);
 
   logEvent('news.run.finished', null, {

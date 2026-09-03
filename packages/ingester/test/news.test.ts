@@ -87,9 +87,50 @@ describe('parseNewsFeed entry handling', () => {
   });
 
   it('rejects one bad entry without losing the good ones beside it', () => {
-    const outcomes = parseNewsFeed(feedOf([entry(), entry({ link: 42 }), entry({ link: 'https://x.example/3' })]));
+    const good = 'https://www.canada.ca/en/immigration-refugees-citizenship/news/2026/07/another.html';
+    const outcomes = parseNewsFeed(feedOf([entry(), entry({ link: 42 }), entry({ link: good })]));
     expect(outcomes.map((o) => o.ok)).toStrictEqual([true, false, true]);
     expect(itemsFrom(outcomes).length).toBe(2);
+  });
+});
+
+/**
+ * `link` is the only value in this package that a parsed payload turns into a
+ * URL - it becomes an href on the public news page and in the review console.
+ * parse.ts builds source_url from a module constant precisely to avoid that,
+ * and this is the one place where the feed chooses. A reviewer reads IRCC's
+ * headline and clicks Publish; they do not read the href behind it, so the
+ * origin has to be proved here rather than trusted there.
+ */
+describe('parseNewsFeed link origin', () => {
+  it('keeps a link on IRCC’s newsroom origin', () => {
+    const [outcome] = parseNewsFeed(feedOf([entry()]));
+    expect(outcome?.ok).toBe(true);
+  });
+
+  it('rejects a data: URL wearing an IRCC headline', () => {
+    const [outcome] = parseNewsFeed(feedOf([entry({ link: 'data:text/html;base64,PHNjcmlwdD4=' })]));
+    expect(outcome?.ok).toBe(false);
+  });
+
+  it('rejects a javascript: URL', () => {
+    const [outcome] = parseNewsFeed(feedOf([entry({ link: 'javascript:alert(1)' })]));
+    expect(outcome?.ok).toBe(false);
+  });
+
+  it('rejects another host, however plausible it looks', () => {
+    const [outcome] = parseNewsFeed(feedOf([entry({ link: 'https://canada-ca.example/news/express-entry.html' })]));
+    expect(outcome?.ok).toBe(false);
+  });
+
+  it('rejects an unlisted canada.ca subdomain, as the fetch allowlist does', () => {
+    const [outcome] = parseNewsFeed(feedOf([entry({ link: 'https://evil.canada.ca/news.html' })]));
+    expect(outcome?.ok).toBe(false);
+  });
+
+  it('rejects a relative link rather than resolving it against a guessed base', () => {
+    const [outcome] = parseNewsFeed(feedOf([entry({ link: '/en/immigration/news/2026/07/example.html' })]));
+    expect(outcome?.ok).toBe(false);
   });
 });
 

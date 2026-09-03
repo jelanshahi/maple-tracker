@@ -40,7 +40,11 @@ export async function fetchPublishedNews(client: ReadClient): Promise<NewsItem[]
       .limit(PUBLISHED_LIMIT),
     'read published news',
   );
-  return z.array(newsItemSchema).parse(rows);
+  const items = z.array(newsItemSchema).parse(rows);
+  if (items.length >= PUBLISHED_LIMIT) {
+    throw new Error(`read published news: hit the ${PUBLISHED_LIMIT} row limit, the archive is being truncated`);
+  }
+  return items;
 }
 
 /**
@@ -62,7 +66,15 @@ export async function fetchReviewQueue(client: AuthedClient): Promise<NewsItem[]
       .limit(QUEUE_LIMIT),
     'read review queue',
   );
-  return z.array(newsItemSchema).parse(rows);
+  const items = z.array(newsItemSchema).parse(rows);
+  // Oldest-first ordering means the rows a silent truncation drops are the
+  // newest ones - the announcements an editor most needs to see. The queue
+  // starts at 100 legacy drafts and gains up to 50 a night, so this limit is
+  // reachable by doing nothing.
+  if (items.length >= QUEUE_LIMIT) {
+    throw new Error(`read review queue: hit the ${QUEUE_LIMIT} row limit, the newest drafts are being truncated`);
+  }
+  return items;
 }
 
 /**

@@ -39,6 +39,33 @@ const feedSchema = z.object({
   }),
 });
 
+/**
+ * `link` is the one value off the network that this project turns into a URL.
+ *
+ * Everywhere else the rule in CLAUDE.md holds literally - parse.ts builds
+ * source_url from a module constant and a validated round number, never from
+ * the payload - but a news item's whole purpose is to link to IRCC's own
+ * release, so the feed does choose the href here. It becomes an `<a href>` on
+ * the public page and in the review console, and a reviewer approving an item
+ * reads the headline, not the href behind it. So the origin is proved at the
+ * boundary instead: a `data:` or `javascript:` link, or a plausible-looking
+ * lookalike host, is rejected rather than shown to a human for a rubber stamp.
+ *
+ * Pinned to the exact origin, subdomains included, matching fetch.ts's
+ * allowlist. api.io.canada.ca serves the feed but never hosts a release.
+ */
+const NEWSROOM_ORIGIN = 'https://www.canada.ca';
+
+function isNewsroomUrl(link: string): boolean {
+  try {
+    return new URL(link).origin === NEWSROOM_ORIGIN;
+  } catch {
+    // A relative link lands here. Resolving it would mean guessing a base, and
+    // a guess is exactly what must not decide where a reader is sent.
+    return false;
+  }
+}
+
 export type NewsParseOutcome =
   | { ok: true; item: CandidateNewsItem }
   | { ok: false; reason: string };
@@ -73,6 +100,10 @@ function parseEntry(raw: unknown): NewsParseOutcome {
   const { link, title, teaser, publishedDate } = parsed.data;
   if (link.trim() === '' || title.trim() === '') {
     return { ok: false, reason: 'entry had no link or no title' };
+  }
+
+  if (!isNewsroomUrl(link)) {
+    return { ok: false, reason: `entry link was not on ${NEWSROOM_ORIGIN}` };
   }
 
   const publishedAt = toUtcIso(publishedDate);
