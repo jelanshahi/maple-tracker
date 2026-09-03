@@ -5,6 +5,7 @@ import {
   formatChange,
   formatDate,
   formatDateTime,
+  formatNewsDate,
   formatInteger,
   hoursBetween,
   isStale,
@@ -37,6 +38,37 @@ describe('timestamp parsing', () => {
 describe('formatDateTime', () => {
   it('labels the timezone, because an unlabelled tie-break time misleads', () => {
     expect(formatDateTime('2026-08-19T12:35:37+00:00')).toBe('August 19, 2026, 12:35 UTC');
+  });
+});
+
+/**
+ * A news item's date is IRCC's, not ours.
+ *
+ * Everything else here renders UTC because it describes an instant this site
+ * measured - a draw, a tie-break, a verification. A release date describes an
+ * editorial decision IRCC already made and already printed on the page we link
+ * to, so the only correct rendering is the one on that page. IRCC publishes
+ * from Ottawa, and 5 of the 104 rows in news_items are late enough in the day
+ * that their UTC date is the following one.
+ */
+describe('formatNewsDate', () => {
+  it('gives an evening Ottawa release the date IRCC printed on it', () => {
+    // 20:30 EDT on the 29th is 00:30 UTC on the 30th. IRCC's page says the 29th.
+    expect(formatNewsDate('2026-07-30T00:30:00.000Z')).toBe('July 29, 2026');
+  });
+
+  it('handles standard time as well as daylight time', () => {
+    // 21:30 EST on 14 January is 02:30 UTC on the 15th.
+    expect(formatNewsDate('2026-01-15T02:30:00.000Z')).toBe('January 14, 2026');
+  });
+
+  it('agrees with the UTC rendering when the release was published midday', () => {
+    expect(formatNewsDate('2026-07-29T17:20:00.000Z')).toBe('July 29, 2026');
+    expect(formatDate('2026-07-29T17:20:00.000Z')).toBe('July 29, 2026');
+  });
+
+  it('throws rather than rendering Invalid Date, as formatDate does', () => {
+    expect(() => formatNewsDate('not a timestamp')).toThrow(/unparseable timestamp/);
   });
 });
 

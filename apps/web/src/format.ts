@@ -48,6 +48,32 @@ export function formatDate(timestamp: string): string {
   return DATE_FORMAT.format(toDate(timestamp));
 }
 
+/**
+ * IRCC publishes from Ottawa, so a release date is an Ottawa date.
+ *
+ * This is the one exception to the UTC rule above, and it is an exception for
+ * the opposite of the usual reason. The rule exists so the server never guesses
+ * a *viewer's* timezone; this guesses nobody's. A release date is a fact IRCC
+ * already fixed and already printed on the page each item links to, so rendering
+ * it in UTC does not make it more precise - it makes it disagree with the
+ * source. 5 of the 104 rows in news_items were published late enough in the
+ * Ottawa day for their UTC date to fall on the next one, and /news exists to
+ * reproduce what IRCC said, dates included.
+ *
+ * A fixed IANA zone, not the server's: America/Toronto renders identically
+ * wherever this builds, so ISR caching stays safe.
+ */
+const NEWS_DATE_FORMAT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Toronto',
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+});
+
+export function formatNewsDate(timestamp: string): string {
+  return NEWS_DATE_FORMAT.format(toDate(timestamp));
+}
+
 export function formatDateTime(timestamp: string): string {
   const date = toDate(timestamp);
   return `${DATE_FORMAT.format(date)}, ${TIME_FORMAT.format(date)} UTC`;

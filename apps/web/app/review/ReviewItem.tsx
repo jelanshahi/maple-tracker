@@ -9,7 +9,7 @@
  * on a page about immigration.
  */
 import { useState, useTransition } from 'react';
-import { formatDate } from '../../src/format.ts';
+import { formatNewsDate } from '../../src/format.ts';
 import type { NewsItem } from '../../src/newsRows.ts';
 import { NEWS_TAGS, TAG_LABELS, knownTags } from '../../src/tags.ts';
 import type { NewsTag } from '../../src/tags.ts';
@@ -34,7 +34,7 @@ export function ReviewItem({ item }: { item: NewsItem }) {
 
   return (
     <li className={styles.newsItem}>
-      <p className={styles.newsMeta}>{formatDate(item.published_at)}</p>
+      <p className={styles.newsMeta}>{formatNewsDate(item.published_at)}</p>
       <h2 className={styles.newsTitle}>
         <a href={item.url}>{item.title}</a>
       </h2>

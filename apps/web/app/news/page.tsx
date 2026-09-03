@@ -1,4 +1,4 @@
-import { formatDate } from '../../src/format.ts';
+import { formatNewsDate } from '../../src/format.ts';
 import { fetchPublishedNews } from '../../src/newsQueries.ts';
 import { createReadClient } from '../../src/supabase.ts';
 import { TAG_LABELS, knownTags } from '../../src/tags.ts';
@@ -41,7 +41,7 @@ export default async function NewsPage() {
             return (
               <li key={item.id} className={styles.newsItem}>
                 <p className={styles.newsMeta}>
-                  {formatDate(item.published_at)}
+                  {formatNewsDate(item.published_at)}
                   {tags.map((tag) => (
                     <span key={tag} className={styles.tag}>{TAG_LABELS[tag]}</span>
                   ))}

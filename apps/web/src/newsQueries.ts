@@ -98,14 +98,20 @@ export async function isEditor(client: AuthedClient, userId: string): Promise<bo
  * non-editor's update matches no rows rather than being refused, which is the
  * same non-answer they get everywhere else.
  */
+/**
+ * 'already-decided' is not an error, it is a race with another editor, and the
+ * console has something true to say about it. A genuine failure still throws.
+ */
+export type DecisionOutcome = 'recorded' | 'already-decided';
+
 export async function recordDecision(
   client: AuthedClient,
   itemId: number,
   decision: 'published' | 'rejected',
   reviewerId: string,
   tags: readonly NewsTag[],
-): Promise<void> {
-  const { error } = await client
+): Promise<DecisionOutcome> {
+  const { data, error } = await client
     .from('news_items')
     .update({
       status: decision,
@@ -113,7 +119,15 @@ export async function recordDecision(
       reviewed_by: reviewerId,
       tags: [...tags],
     })
-    .eq('id', itemId);
+    .eq('id', itemId)
+    // Only a draft may be decided. Two editors both have item 42 on screen; the
+    // first publishes it, the second clicks Reject. Without this condition the
+    // second write lands, silently overwriting a colleague's decision, and the
+    // reviewer is told "Rejected, and it will not come back" about an item that
+    // is live on /news.
+    .eq('status', 'draft')
+    .select('id');
 
   if (error !== null) throw new Error(`record decision: ${error.message}`);
+  return data !== null && data.length > 0 ? 'recorded' : 'already-decided';
 }

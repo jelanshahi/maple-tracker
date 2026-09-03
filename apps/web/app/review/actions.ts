@@ -39,10 +39,17 @@ export async function review(input: unknown): Promise<ReviewResult> {
   }
 
   const { itemId, decision, tags } = parsed.data;
-  await recordDecision(client, itemId, decision, userId, tags);
+  const outcome = await recordDecision(client, itemId, decision, userId, tags);
 
+  // Both paths revalidate: whoever won the race, this item is no longer a draft
+  // and the queue on screen is out of date either way.
   revalidatePath('/review');
   revalidatePath('/news');
+
+  if (outcome === 'already-decided') {
+    return { status: 'error', message: 'Another editor has already decided this one.' };
+  }
+
   return {
     status: 'done',
     message: decision === 'published' ? 'Published.' : 'Rejected, and it will not come back.',
