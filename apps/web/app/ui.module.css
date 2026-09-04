@@ -404,3 +404,18 @@
   color: var(--muted);
   padding: 0 0.35rem;
 }
+
+/* A what-if row is a sentence, not a token, so it is the one table cell that
+   wraps. Without this the nomination note alone would make the table scroll
+   several screens sideways. */
+.leverChange {
+  white-space: normal;
+  min-width: 18rem;
+  max-width: 34rem;
+}
+
+/* The nomination row is pinned below every other row rather than sorted with
+   them; the rule says so visually. See whatIf.ts for why it is pinned. */
+.leverPinned td {
+  border-top: 2px solid var(--border);
+}

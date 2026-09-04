@@ -26,11 +26,16 @@ import { CutoffGap } from './CutoffGap.tsx';
 import { SaveProfile } from './SaveProfile.tsx';
 import { ScoreBreakdown } from './ScoreBreakdown.tsx';
 import { SpouseFieldset } from './SpouseFieldset.tsx';
+import { WhatIf } from './WhatIf.tsx';
 import styles from '../ui.module.css';
 
 export function CalculatorForm({ cutoffs }: { cutoffs: readonly CutoffMark[] }) {
   const [form, setForm] = useState(emptyForm);
-  const result = score(toProfile(form), crsCurrent);
+  // Hoisted because WhatIf scores this same profile again, once per row. score()
+  // is pure and synchronous, so that is arithmetic on data already in memory -
+  // no memoisation until a profiler says otherwise.
+  const profile = toProfile(form);
+  const result = score(profile, crsCurrent);
 
   return (
     <div className={styles.calculator}>
@@ -54,6 +59,7 @@ export function CalculatorForm({ cutoffs }: { cutoffs: readonly CutoffMark[] }) 
         <ScoreBreakdown result={result} ruleSet={crsCurrent} />
         <SaveProfile form={form} onLoad={setForm} />
         <CutoffGap total={result.total} cutoffs={cutoffs} />
+        <WhatIf profile={profile} ruleSet={crsCurrent} />
       </div>
     </div>
   );

@@ -18,7 +18,13 @@ import type { CutoffMark } from '../../src/gap.ts';
 import { formatDate, formatInteger } from '../../src/format.ts';
 import styles from '../ui.module.css';
 
-const IRCC_ELIGIBILITY =
+/**
+ * Exported because WhatIf makes the same point and must link to the same place.
+ * A URL duplicated in two files is a URL that drifts in one of them, and this
+ * one is the app's only pointer at who actually decides eligibility. It moves
+ * to a shared module if a third caller appears, not before.
+ */
+export const IRCC_ELIGIBILITY =
   'https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry/who-can-apply.html';
 
 function differenceText(difference: number): string {
