@@ -27,9 +27,11 @@ evidence:
 | Published items render on `/news` in IRCC's own words, linking to the release | confirmed this session — see below |
 | `pnpm typecheck`, `pnpm test` and `pnpm build` all clean | 390 tests, clean as of `b7b4c3e` |
 
-**Steps 1–6 are now all complete and verified.** Nothing is in progress. The next
-step per `ARCHITECTURE.md` §9 would be step 7 (email alerts), which is out of
-scope until someone explicitly starts it.
+**Steps 1–6 are now all complete and verified.** Step 7 followed on 2026-09-03:
+the what-if panel on `/calculator`, built and verified against the running page.
+`ARCHITECTURE.md` §9 was renumbered to make room for it, so **email alerts are
+now step 8 and mobile step 9** — a reference to "step 7 email work" written
+before that date means step 8.
 
 A code review after that verification found six things, all fixed in `6267d9c`
 and `b7b4c3e` — see "What the code review found" below. Two of them were holes
@@ -138,9 +140,10 @@ server renders cannot know a viewer's timezone and must not guess — and a news
 date guesses nobody's timezone. It reproduces a date IRCC already fixed and
 already printed on the release each item links to, so UTC does not make it more
 precise, it makes it disagree with the source. A UTC *label* would not have
-helped; the number itself was the problem. **`CLAUDE.md` has not been amended,
-and its wording now overstates what the code does** — either carve out the
-exception there or revert `formatNewsDate`, but do not leave the two disagreeing.
+helped; the number itself was the problem. **Settled 2026-09-03 in favour of the
+code:** `CLAUDE.md`'s web-client rules now carry the exception, and
+`ARCHITECTURE.md` §7 carries it with a corrections-log row. The carve-out is one
+function wide and does not reach a round's tie-break time.
 
 ---
 
@@ -225,9 +228,9 @@ Two rules that are load-bearing rather than stylistic, still true: order by
 
 ## Loose ends
 
-- **`CLAUDE.md` and `formatNewsDate` disagree.** See finding 6 above. Decide it
-  one way or the other; leaving a documented rule that the code does not follow
-  is how the four `ARCHITECTURE.md` drifts of the step 3 session happened.
+- ~~**`CLAUDE.md` and `formatNewsDate` disagree.**~~ Closed 2026-09-03: the
+  exception is now written into `CLAUDE.md` and `ARCHITECTURE.md` §7, with a
+  corrections-log row. See finding 6 above.
 - **`must<T>()` is now byte-identical in four files** — `store.ts`, `queries.ts`,
   `accountQueries.ts`, `newsQueries.ts`. `CLAUDE.md`'s rule of three has been
   reached, so extracting it is now permitted rather than speculative. Nobody has
@@ -239,5 +242,5 @@ Two rules that are load-bearing rather than stylistic, still true: order by
   than the suite delivers, and `newsStore.ts`, `newsQueries.ts` and the `/review`
   guard have no tests at all.
 - **Resend sends only to the account owner.** `onboarding@resend.dev` will not
-  deliver to anyone but `jelanshahi6@gmail.com`. Any step 7 email work needs a
-  verified domain first — that is a prerequisite, not a detail.
+  deliver to anyone but `jelanshahi6@gmail.com`. The email-alerts step — now
+  step 8 — needs a verified domain first. That is a prerequisite, not a detail.

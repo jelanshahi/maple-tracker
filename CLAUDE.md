@@ -4,13 +4,13 @@ Maple Tracker — Express Entry draw tracking, IRCC news, and a CRS calculator.
 
 `ARCHITECTURE.md` is the source of truth for schema, data sources, and scoring rules. Read it before making any structural decision. This file is how we work together.
 
-**Current scope: step 6 of the build order** — news and the review console: a nightly-runnable ingest of IRCC’s newsroom into a draft queue, human approval, and a public news page. Steps 1–5 are complete.
+**Current scope: step 7 of the build order** — the what-if panel on `/calculator`: the same profile scored again with one answer changed, so a reader can see which inputs their points hang on. Steps 1–6 are complete.
 
-**This is the first step that stores personal data.** A `Profile` is personal information under PIPEDA, Law 25 and GDPR. Read the Security section below before touching anything under `app/account/`, `app/history/` or `src/accountQueries.ts`.
+**This project stores personal data, as it has since step 5.** A `Profile` is personal information under PIPEDA, Law 25 and GDPR. Read the Security section below before touching anything under `app/account/`, `app/history/` or `src/accountQueries.ts`. Step 7 adds no new storage: the what-if panel runs in the browser on a profile that is already there.
 
-The design for this step is `docs/superpowers/specs/2026-09-01-step-6-news-review-design.md`.
-Earlier steps: `2026-08-31-step-5-accounts-design.md`, `2026-08-30-step-4-calculator-design.md`,
-`2026-08-28-step-3-web-read-only-design.md`.
+The design for this step is `docs/superpowers/specs/2026-09-03-step-7-what-if-design.md`.
+Earlier steps: `2026-09-01-step-6-news-review-design.md`, `2026-08-31-step-5-accounts-design.md`,
+`2026-08-30-step-4-calculator-design.md`, `2026-08-28-step-3-web-read-only-design.md`.
 
 ---
 
@@ -18,7 +18,9 @@ Earlier steps: `2026-08-31-step-5-accounts-design.md`, `2026-08-30-step-4-calcul
 
 These override any general instinct about how a project "should" be structured.
 
-**Build only what is asked for.** If `ARCHITECTURE.md` §9 doesn't list it in the current step, it's out of scope. Do not add it "for later." Explicitly out of scope right now: email alerts (step 7), mobile (step 8), **scheduling** — `pnpm ingest:news` is a command, and the cron that calls it is a deployment decision — eligibility assessment, several named profiles per user, sharing a profile, OAuth providers, comments, any HTTP API beyond the one auth callback route, provincial data, processing times, pool-distribution charts, Docker, deployment and hosting config, monorepo tooling (turbo/nx), CI beyond `test` + `typecheck`.
+**Build only what is asked for.** If `ARCHITECTURE.md` §9 doesn't list it in the current step, it's out of scope. Do not add it "for later." Explicitly out of scope right now: email alerts (step 8), mobile (step 9), **scheduling** — `pnpm ingest:news` is a command, and the cron that calls it is a deployment decision — eligibility assessment, several named profiles per user, sharing a profile, OAuth providers, comments, any HTTP API beyond the one auth callback route, provincial data, processing times, pool-distribution charts, Docker, deployment and hosting config, monorepo tooling (turbo/nx), CI beyond `test` + `typecheck`.
+
+**The what-if panel is not an eligibility assessment**, which stays out of scope. The distinction is the legal one and it is easy to blur. The panel re-runs published arithmetic on a profile the reader typed and reports the difference; it does not ask whether a change is available to them, whether it would be worth making, or whether it would get them invited. The moment a row answers one of those, it is advice under IRPA s.91. `apps/web/test/whatIf.test.ts` asserts the wording rather than trusting it.
 
 **No speculative abstraction.** Do not write an interface, base class, factory, adapter, or generic helper until the same shape appears a **third** time. Two similar functions are fine. A `BaseSource` class with one subclass is not. A `utils.ts` of one-off helpers is not.
 
@@ -81,6 +83,7 @@ apps/web/                    Next.js App Router, anon key only, server-rendered 
   app/                       routes: /, /rounds, /rounds/[roundNumber], /categories,
                              /calculator, /account, /history, /auth/confirm
   app/calculator/            client components + the save/load server actions
+                             WhatIf.tsx renders the one-answer-changed rows
   app/account/               sign in, sign out, delete account
   app/news/                  public: reviewed IRCC announcements
   app/review/                editors only: the draft queue
@@ -90,6 +93,7 @@ apps/web/                    Next.js App Router, anon key only, server-rendered 
   src/rows.ts                zod row schemas + row types
   src/ladder.ts              pure: rounds -> cut-off ladder
   src/gap.ts                 pure: score vs the latest cut-off per stream
+  src/whatIf.ts              pure: the same profile re-scored, one answer at a time
   src/profile.ts             pure: labels for the codes crs-rules works in
   src/profileForm.ts         pure: what the form holds
   src/profileMapping.ts      pure: form state <-> Profile, both directions
@@ -241,13 +245,14 @@ These come from `ARCHITECTURE.md` §7 and §10. They are requirements, not polis
 
 - **Every number links to its source.** Each round renders its `source_url` to the IRCC page it came from. A number without provenance does not render.
 - **Never silently stale.** The site shows when the data was last verified, and says so plainly when that is over 24 hours old. A tracker that admits it might be stale beats one that quietly lies.
-- **Dates are stored UTC, displayed in local time, and labelled with the timezone.** Tie-break timestamps especially — an unlabelled tie-break time is actively misleading.
+- **Dates are stored UTC and always rendered with their timezone named.** Tie-break timestamps especially — an unlabelled tie-break time is actively misleading. Which timezone is the next rule.
 - **No immigration advice.** State facts, show gaps, link to IRCC. Never phrase anything as a prediction or a recommendation about someone's case. IRPA s.91 is a legal boundary, not an editorial preference.
 - **Carry the not-affiliated disclaimer**, in the wording already in `README.md`.
 - **No Canada wordmark, no flag symbol, no IRCC branding.** Attribute under the Open Government Licence.
 - **No outbound requests from the browser.** No analytics, no third-party scripts, no CDN fonts.
 - **Never present a comparison that is not like for like.** Withholding a number and saying why beats printing a confident wrong one. `round_type = 'program'` on its own mixes CEC and PNP rounds whose cut-offs are hundreds of points apart, which is why every program round now carries a `program_code` and the ladder keys on that: each program is its own comparable stream. The generic `program` bucket survives only as the honest fallback for a round with no code, and shows no movement — see `ARCHITECTURE.md` §11.
 - **Timestamps render in UTC and say "UTC".** Not device-local: pages are ISR-cached server renders, so the server does not know the viewer's timezone and must not guess it.
+- **One exception, and it is the opposite case: a news release date renders in Ottawa time** (`formatNewsDate`, `America/Toronto`). The UTC rule exists so the server never guesses a *viewer's* timezone; this guesses nobody's. IRCC publishes from Ottawa, so the release date is an Ottawa date, already printed on the page each item links to. Rendering it in UTC does not make it more precise, it makes it disagree with the source — it did, on 5 of 104 rows, 3 of them already published. Do not "fix" `formatNewsDate` back to UTC, and do not extend this to a round's tie-break time, which is a UTC instant and not a date anybody printed.
 
 ---
 
@@ -314,6 +319,18 @@ No stray `console.log` left in committed code — if it's worth keeping it's a s
 - Published items render on `/news` in IRCC’s own words, each linking to the release
 - `pnpm typecheck`, `pnpm test` and `pnpm build` all clean
 
+**Step 7 — the what-if panel**
+- `/calculator` shows the same profile scored again with one answer changed, under `crs-current`
+- Every delta is the difference between two real `score()` calls, asserted for every row, with at least one delta worked out by hand from IRCC's published criteria so the assertion is not circular
+- No points value appears anywhere in `whatIf.ts`
+- The `theoretical maximum, single` fixture makes the whole panel disappear, rather than rendering a table of zeroes
+- The provincial nomination row is last, never sorted by size, and carries its caveat
+- Spouse rows appear only when a spouse is actually accompanying
+- No label or note advises, recommends, ranks a change as best, or mentions a cut-off, eligibility or an invitation — asserted, because the wording is the IRPA s.91 boundary
+- No label names an internal input and none renders `null`
+- `/calculator` is still statically prerendered and the profile still never leaves the browser
+- `pnpm typecheck`, `pnpm test` and `pnpm build` all clean
+
 ---
 
 ## Don't
@@ -329,6 +346,7 @@ No stray `console.log` left in committed code — if it's worth keeping it's a s
 - Don't `select('*')` from `draw_rounds`. The `raw` column is the whole source payload.
 - Don't send, store, or log a `Profile`. It never leaves the browser — no fetch, no localStorage, no URL.
 - Don't phrase a cut-off comparison as a prediction or as advice about someone's case.
+- Don't write a points value into `whatIf.ts`, and don't sort the nomination row by size. Both are load-bearing — see the step 7 rule above.
 - Don't put the anon key in the browser. No `NEXT_PUBLIC_`, no `createBrowserClient`, no session in `localStorage`.
 - Don't add an `anon` policy to `saved_profiles` or `assessments`, and don't make a per-user page ISR-cached.
 - Don't apply a migration with the Supabase MCP tool. Use `supabase db push` — see HANDOFF.md.

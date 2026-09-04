@@ -481,6 +481,20 @@ This influences decisions that cost people years and thousands of dollars.
 
 Point 3 is a legal boundary as well as an editorial one: IRPA s.91 restricts giving immigration advice for consideration to authorized representatives.
 
+Point 4 has one exception, added with step 6 and going the other way: **a news release date renders in Ottawa time**, not UTC. The rule above exists so the server never guesses a *viewer's* timezone; a release date guesses nobody's. IRCC publishes from Ottawa, the date is already printed on the page each item links to, and rendering it in UTC moved 5 of 104 rows onto the following day — disagreeing with the source rather than being more precise about it. It does not extend to a round's tie-break time, which is an instant rather than a date somebody printed.
+
+### 7.6 What-if arithmetic is not advice
+
+Step 7 puts a panel on `/calculator` showing the same profile scored again with one answer changed. It exists on one condition: it reports arithmetic and stops.
+
+- Every number is the difference between two real `score()` calls on IRCC's published criteria. No points value is written into the panel's own source, so a rule-set change moves the rows without anyone editing them.
+- Rows are not ranked as advisable, are never called "best", and are never compared to a cut-off. The cut-off table sits directly above; letting the reader hold the two side by side is the design, and doing it for them is the thing IRPA s.91 rules out.
+- Provincial nomination is shown because withholding it would be dishonest at 600 points, and pinned last rather than sorted by size, because at the top of every panel it reads as an instruction. Its row says in words that a nomination is a separate application to a province under that province's criteria.
+- Age is not a lever. A lever is a matter of degree that could be pursued; a birthday is not, and "you will lose 5 points next year" is exactly the forward-looking register the rest of this section avoids.
+- The wording is asserted in tests rather than reviewed by eye, the same way the scoring engine's explanations are.
+
+This is not an eligibility assessment, which remains out of scope. The panel never asks whether a change is open to the reader — only what the published table would produce if the answer were different.
+
 ---
 
 ## 8. Scale
@@ -508,8 +522,9 @@ The thing that would actually break at scale is alert fan-out, and that's a late
 4. **Calculator.** Rules package wired into the web app, client-side, still no accounts.
 5. **Accounts + saved profiles.** Score-over-time falls out of this for free.
 6. **News + review console.** Nightly diff, draft queue, human approval before publish.
-7. **Email alerts.** A fifth of the work of push, and it tells you whether anyone wants alerts at all.
-8. **Mobile.** Only if email alerts show real engagement.
+7. **What-if panel on the calculator.** The same profile scored again with one answer changed, so a reader can see which inputs their points hang on. Pure arithmetic on the rule set already in the browser: no schema, no new storage, no request.
+8. **Email alerts.** A fifth of the work of push, and it tells you whether anyone wants alerts at all.
+9. **Mobile.** Only if email alerts show real engagement.
 
 Steps 1–4 are the actual product. Stopping after 4 leaves something genuinely useful.
 
@@ -558,6 +573,8 @@ and each is a defect that would have caused silent data loss or a permanently fa
 | 4 | editor checks written inline in the policy | `public.is_editor()`, `security definer` | **2026-09-01.** `using (exists (select 1 from editors where user_id = auth.uid()))` **on `editors` itself** recurses — reading the table runs the policy, which reads the table. Postgres raises "infinite recursion detected in policy for relation editors", and because the `news_items` editor policies evaluate the same subquery, every editor path failed rather than just the roster read. It survived the anon checks because anon has no privileges on `editors` and the public news policy is a plain status comparison, so neither ever evaluated the recursive rule; simulating a signed-in non-editor found it in one query. Fixed forward in `20260901021500_editors_no_recursion.sql`. |
 | 3 | newsroom is "an RSS/Atom feed" | there is a JSON endpoint, and it is better | **2026-09-01.** `api.io.canada.ca/io-server/gc/news/en/v2?...&format=json` returns `application/json` with entries shaped `{ link, teaser, publishedDate, title }`, so news needs no XML parser and no new dependency. Different host, hence a second allowlist entry — still Government of Canada. **It also must not be cache-busted**: appending `_=<timestamp>` makes it return zero entries rather than an error, because it reads unknown query parameters as filters. The rounds JSON still needs busting, so the two sources differ deliberately. |
 | 4 | schema block omitted `news_items` | it exists, with a public-read policy | **2026-08-30.** Kept deliberately by `20260823090000_drop_legacy.sql` — 100 real IRCC news items from Nov 2024 to Jul 2026 that may not be re-scrapable. Out of scope until step 6, but a table absent from the schema block is a table nobody remembers to check RLS on. |
+
+| 7 | every timestamp renders in UTC, no exceptions | news release dates render in Ottawa time | **2026-09-03.** The UTC rule is about not guessing a *viewer's* timezone, and a release date guesses nobody's: IRCC publishes from Ottawa and the date is already printed on the page each item links to. Converting an Ottawa evening to UTC pushed 5 of the 104 rows in `news_items` onto the following day, 3 of them already published — the site disagreed with its own source while claiming provenance. `formatNewsDate` fixed it in `b7b4c3e`; §7 and `CLAUDE.md` said otherwise until now, which is the drift this log exists to stop. The exception is one function wide and does not reach a round's tie-break time. |
 
 Confirmed **correct** as written, having been checked rather than assumed:
 
