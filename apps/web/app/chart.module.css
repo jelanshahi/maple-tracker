@@ -1,0 +1,208 @@
+/*
+ * The cut-off trend chart. Its own module because it is the only thing on the
+ * site that is not a card, a table or a form, and folding it into ui.module.css
+ * would give that file a second job.
+ *
+ * Axis labels are HTML positioned over the SVG rather than <text> inside it.
+ * The SVG scales with the column, so text inside it would render at 14px on a
+ * desktop and 7px on a phone; an overlay keeps every label at one size.
+ */
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.625rem 1.25rem;
+  margin-bottom: 0.875rem;
+}
+
+.head h2 {
+  margin: 0;
+}
+
+.ranges {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--rule);
+  border-radius: var(--radius-sm);
+}
+
+.range {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 5px 12px;
+  border-radius: 7px;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.rangeCurrent {
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* The chips are the legend as well as the control: colour, name, and on/off. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 0.875rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.chipOff {
+  background: transparent;
+  color: var(--faint);
+  border-color: var(--rule);
+}
+
+.chipDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.chipActions {
+  display: flex;
+  gap: 0.625rem;
+  margin-left: auto;
+  font-size: 0.78rem;
+}
+
+.link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.plot {
+  position: relative;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.gridLine {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+
+.line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.lineDim {
+  opacity: 0.25;
+}
+
+.dot {
+  fill: var(--surface);
+  stroke-width: 1.5;
+}
+
+.dotOn {
+  stroke-width: 2;
+}
+
+/*
+ * An invisible disc over each point, big enough to hit with a finger. The
+ * stroke has to be cleared explicitly: it sits in the series group, which sets
+ * a stroke colour for the line and the visible dots, and without this every hit
+ * target draws itself as an 11px ring.
+ */
+.hit {
+  fill: transparent;
+  stroke: none;
+  cursor: crosshair;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.gridLabel {
+  position: absolute;
+  left: 0;
+  width: 4.2%;
+  transform: translateY(-50%);
+  text-align: right;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.69rem;
+  color: var(--faint);
+}
+
+.tickLabel {
+  position: absolute;
+  top: 95%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 0.69rem;
+  color: var(--faint);
+}
+
+/*
+ * Fixed height, so hovering from point to point does not reflow the card. It
+ * holds a round's detail, and that detail carries the round's IRCC link -
+ * ARCHITECTURE.md section 7.1: a number without provenance does not render.
+ */
+.detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.1rem;
+  min-height: 44px;
+  margin: 0.5rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.82rem;
+}
+
+.detailStream {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.detailFigure {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.caveat {
+  margin: 0.875rem 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  max-width: 46rem;
+}

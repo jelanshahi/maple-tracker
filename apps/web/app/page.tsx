@@ -1,3 +1,4 @@
+import { chartStreams, toChartPoints } from '../src/chart.ts';
 import {
   describeRoundType, formatChange, formatDate, formatDateTime, formatInteger, mergeStreamLabels,
   streamLabel,
@@ -5,12 +6,15 @@ import {
 import { buildLadder } from '../src/ladder.ts';
 import { fetchCategories, fetchPrograms, fetchRounds } from '../src/queries.ts';
 import { createReadClient } from '../src/supabase.ts';
+import { CutoffChart } from './CutoffChart.tsx';
 import { RoundsTable } from './RoundsTable.tsx';
 import styles from './ui.module.css';
 
 export const revalidate = 900;
 
 const RECENT_COUNT = 12;
+/** How many streams the chart starts with switched on. */
+const OPENING_STREAMS = 3;
 
 export default async function LatestPage() {
   const client = createReadClient();
@@ -30,6 +34,13 @@ export default async function LatestPage() {
   // round - and it has already applied the rule about which streams may show
   // movement at all. Recomputing that here would be a second copy of it.
   const newest = buildLadder(rounds, categories, programs)[0];
+  const points = toChartPoints(rounds, streamLabels);
+  const streams = chartStreams(points);
+  const opening = [...streams]
+    .sort((a, b) => b.roundCount - a.roundCount)
+    .slice(0, OPENING_STREAMS)
+    .map((stream) => stream.key);
+
   const oldest = rounds.at(-1);
   const latestLabel = describeRoundType(latest.round_type, streamLabel(latest, streamLabels));
 
@@ -82,6 +93,8 @@ export default async function LatestPage() {
           </p>
         </div>
       </div>
+
+      <CutoffChart points={points} streams={streams} initiallyShown={opening} />
 
       <h2>Recent rounds</h2>
       <RoundsTable rounds={rounds.slice(0, RECENT_COUNT)} streamLabels={streamLabels} />
