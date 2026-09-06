@@ -47,7 +47,25 @@ export default async function HistoryPage() {
           and the score will appear here.
         </p>
       ) : (
-        <div className={styles.tableWrap}>
+        <>
+          {/* buildHistory returns newest first, so the first entry is where the
+              estimate stands now. Nothing here is compared to a cut-off. */}
+          <div className={styles.statGrid}>
+            <div className={`${styles.stat} ${styles.statInk}`}>
+              <p className={styles.statLabel}>Current estimate</p>
+              <p className={styles.statValue}>{formatInteger(history[0]?.total ?? 0)}</p>
+              <p className={styles.statNote}>
+                Saved {history[0] === undefined ? '' : formatDateTime(history[0].createdAt)}.
+              </p>
+            </div>
+            <div className={styles.stat}>
+              <p className={styles.statLabel}>Saves recorded</p>
+              <p className={styles.statValue}>{formatInteger(history.length)}</p>
+              <p className={styles.statNote}>Each one is a score this site worked out for you.</p>
+            </div>
+          </div>
+
+          <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
               <tr>
@@ -76,7 +94,8 @@ export default async function HistoryPage() {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
 
       <p className={styles.muted}>

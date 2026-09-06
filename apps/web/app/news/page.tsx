@@ -40,16 +40,22 @@ export default async function NewsPage() {
             const tags = knownTags(item.tags);
             return (
               <li key={item.id} className={styles.newsItem}>
-                <p className={styles.newsMeta}>
-                  {formatNewsDate(item.published_at)}
-                  {tags.map((tag) => (
-                    <span key={tag} className={styles.tag}>{TAG_LABELS[tag]}</span>
-                  ))}
-                </p>
-                <h2 className={styles.newsTitle}>
-                  <a href={item.url}>{item.title}</a>
-                </h2>
-                {item.summary === null ? null : <p className={styles.muted}>{item.summary}</p>}
+                {/* Headline block on the left, IRCC's own summary beside it.
+                    Both are the department's wording verbatim. */}
+                <div>
+                  <p className={styles.newsMeta}>
+                    {formatNewsDate(item.published_at)}
+                    {tags.map((tag) => (
+                      <span key={tag} className={styles.tag}>{TAG_LABELS[tag]}</span>
+                    ))}
+                  </p>
+                  <h2 className={styles.newsTitle}>
+                    <a href={item.url}>{item.title}</a>
+                  </h2>
+                </div>
+                {item.summary === null ? null : (
+                  <p className={styles.newsSummary}>{item.summary}</p>
+                )}
               </li>
             );
           })}

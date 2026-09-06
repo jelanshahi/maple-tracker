@@ -53,18 +53,25 @@ export default async function AccountPage({
           <p className={styles.inlineWarning} role="status">{MESSAGES[errorKey] ?? MESSAGES['link-invalid']}</p>
         )}
 
-        <SignInForm />
+        <div className={styles.twoUp}>
+          <section className={styles.card}>
+            <SignInForm />
+          </section>
 
-        <h2>What an account stores</h2>
-        <p>
-          Only the answers you choose to save, and the score each save produced. Nothing else — no
-          name, no tracking, no analytics anywhere on this site. Your answers are never shared, and
-          you can delete the account and everything in it at any time, from this page.
-        </p>
-        <p className={styles.muted}>
-          Without an account the <Link href="/calculator">calculator</Link> works exactly the same.
-          It simply forgets your answers when you close the tab.
-        </p>
+          <section className={styles.card}>
+            <h2>What an account stores</h2>
+            <p>
+              Only the answers you choose to save, and the score each save produced. Nothing else —
+              no name, no tracking, no analytics anywhere on this site. Your answers are never
+              shared, and you can delete the account and everything in it at any time, from this
+              page.
+            </p>
+            <p className={styles.muted}>
+              Without an account the <Link href="/calculator">calculator</Link> works exactly the
+              same. It simply forgets your answers when you close the tab.
+            </p>
+          </section>
+        </div>
       </>
     );
   }

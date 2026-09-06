@@ -34,7 +34,12 @@ export default async function CalculatorPage() {
 
   return (
     <>
-      <h1>CRS calculator</h1>
+      <div className={styles.pageHead}>
+        <div>
+          <p className={styles.eyebrow}>Worked out in your browser</p>
+          <h1>CRS calculator</h1>
+        </div>
+      </div>
       <p className={styles.lede}>
         Work out an estimated Comprehensive Ranking System score, and see where it sits against the
         cut-offs of the rounds IRCC has already held.
