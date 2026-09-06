@@ -100,7 +100,7 @@ jobs:
       - name: Have we already ingested this version?
         id: seen
         if: ${{ env.FULL_RUN != 'true' && steps.probe.outputs.skip == 'maybe' }}
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/ingest-marker.txt
           key: ${{ steps.probe.outputs.cache-key }}
@@ -120,15 +120,16 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: ${{ steps.decide.outputs.run == 'true' }}
 
-      - uses: pnpm/action-setup@v4
+      # No version pinned on purpose: with no `version` input this reads
+      # `packageManager` out of the root package.json, so the runner and the dev
+      # machine cannot drift apart without somebody editing that one line.
+      - uses: pnpm/action-setup@v6
         if: ${{ steps.decide.outputs.run == 'true' }}
-        with:
-          version: 11.22.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: ${{ steps.decide.outputs.run == 'true' }}
         with:
           # The ingest script runs bin/ingest.ts through Node directly, so the
@@ -157,7 +158,7 @@ jobs:
       # IRCC published again.
       - name: Remember this version
         if: ${{ success() && steps.decide.outputs.run == 'true' && steps.probe.outputs.cache-key != '' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/ingest-marker.txt
           key: ${{ steps.probe.outputs.cache-key }}
