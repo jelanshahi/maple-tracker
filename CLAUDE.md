@@ -6,6 +6,10 @@ Maple Tracker — Express Entry draw tracking, IRCC news, and a CRS calculator.
 
 **Current scope: step 7 of the build order** — the what-if panel on `/calculator`: the same profile scored again with one answer changed, so a reader can see which inputs their points hang on. Steps 1–6 are complete.
 
+**The site has been restyled to the Maple Tracker design file** (Claude Design project `b5bb8eb1`). That was a visual pass over every existing route — tokens, type, the dark header and footer, cards, tables, the dark score panel — plus one new feature the design carried and the owner approved out of band: the cut-off trend chart on `/`. The chart is genuinely outside the build order; it is here because it was asked for, not because a step called for it. The design's other new features were **not** built and remain out of scope: search and sortable columns on `/rounds`, ladder sparklines, invitation bars, the history sparkline, and every "vs you" column — those last are not merely unbuilt but unbuildable as drawn, because `/` and `/rounds` are ISR-cached server renders and a profile never leaves the browser.
+
+**Round ingestion is scheduled, as of 6 September 2026** — `.github/workflows/ingest.yml`, approved out of band like the chart and likewise outside the build order. It is deployment config and nothing else: no file under `packages/` changed to add it, and it invokes the same `pnpm ingest` a human types. A five-minutely `curl -I` compares `Last-Modified` and only runs the ingester when it moves, because the rounds file is ~800 KB and cache-busted, so polling by downloading it would pull a quarter of a gigabyte a day off a government CDN. **News ingestion is still unscheduled** and stays a manual command. Nothing about deployment or hosting is decided.
+
 **This project stores personal data, as it has since step 5.** A `Profile` is personal information under PIPEDA, Law 25 and GDPR. Read the Security section below before touching anything under `app/account/`, `app/history/` or `src/accountQueries.ts`. Step 7 adds no new storage: the what-if panel runs in the browser on a profile that is already there.
 
 The design for this step is `docs/superpowers/specs/2026-09-03-step-7-what-if-design.md`.
@@ -18,7 +22,7 @@ Earlier steps: `2026-09-01-step-6-news-review-design.md`, `2026-08-31-step-5-acc
 
 These override any general instinct about how a project "should" be structured.
 
-**Build only what is asked for.** If `ARCHITECTURE.md` §9 doesn't list it in the current step, it's out of scope. Do not add it "for later." Explicitly out of scope right now: email alerts (step 8), mobile (step 9), **scheduling** — `pnpm ingest:news` is a command, and the cron that calls it is a deployment decision — eligibility assessment, several named profiles per user, sharing a profile, OAuth providers, comments, any HTTP API beyond the one auth callback route, provincial data, processing times, pool-distribution charts, Docker, deployment and hosting config, monorepo tooling (turbo/nx), CI beyond `test` + `typecheck`.
+**Build only what is asked for.** If `ARCHITECTURE.md` §9 doesn't list it in the current step, it's out of scope. Do not add it "for later." Explicitly out of scope right now: email alerts (step 8), mobile (step 9), **news scheduling** — `pnpm ingest:news` is a command, and the cron that calls it is a deployment decision — eligibility assessment, several named profiles per user, sharing a profile, OAuth providers, comments, any HTTP API beyond the one auth callback route, provincial data, processing times, pool-distribution charts, Docker, deployment and hosting config, monorepo tooling (turbo/nx), CI beyond `test` + `typecheck`.
 
 **The what-if panel is not an eligibility assessment**, which stays out of scope. The distinction is the legal one and it is easy to blur. The panel re-runs published arithmetic on a profile the reader typed and reports the difference; it does not ask whether a change is available to them, whether it would be worth making, or whether it would get them invited. The moment a row answers one of those, it is advice under IRPA s.91. `apps/web/test/whatIf.test.ts` asserts the wording rather than trusting it.
 
@@ -45,6 +49,8 @@ Dev machine is **Windows**.
 Node 20+ · TypeScript 5 strict · ESM · `zod` for validation · `vitest` for tests · `@supabase/supabase-js` · pnpm workspaces · **Next.js (App Router) + React** for the web client.
 
 Styling is **plain CSS Modules** — they ship with Next.js. No Tailwind, no CSS-in-JS, no component library, no icon package. The site is a header and some tables; that does not earn a framework.
+
+Typography is Instrument Serif, IBM Plex Sans and IBM Plex Mono through **`next/font/google`**, which ships inside `next` and is not a new dependency. Next fetches the faces at build time and serves them from this origin, so the no-CDN-fonts rule below holds and the browser makes no third-party request. The cost is that a cold `next build` needs network access once; `pnpm test` already needs one for its audit step. Every face declares a real fallback stack — see `app/fonts.ts`. Do not replace this with a `<link>` to fonts.googleapis.com, which is what the design file does and what the rule forbids.
 
 Nothing else without asking. Every dependency is a supply-chain surface, and this project reads from a government website and writes to a database with a key that bypasses RLS. Keep the surface small. Before adding a dependency, ask whether 20 lines of your own code would do.
 
@@ -82,7 +88,14 @@ apps/web/                    Next.js App Router, anon key only, server-rendered 
   proxy.ts                   refreshes the session cookie (Next 16 name for middleware)
   app/                       routes: /, /rounds, /rounds/[roundNumber], /categories,
                              /calculator, /account, /history, /auth/confirm
+  app/globals.css            design tokens, light and dark, incl. the stream palette
+  app/ui.module.css          shell, cards, tables, forms, the dark score panel
+  app/chart.module.css       the trend chart only - the one thing that is none of those
+  app/fonts.ts               next/font faces, self-hosted; --font-serif/-sans/-mono
+  app/SiteNav.tsx            client: the header links, current one marked (usePathname)
+  app/CutoffChart.tsx        client: cut-off over time, one line per stream
   app/calculator/            client components + the save/load server actions
+                             ScorePanel.tsx is the total; ScoreBreakdown.tsx the audit
                              WhatIf.tsx renders the one-answer-changed rows
   app/account/               sign in, sign out, delete account
   app/news/                  public: reviewed IRCC announcements
@@ -92,6 +105,8 @@ apps/web/                    Next.js App Router, anon key only, server-rendered 
   src/queries.ts             the reads, returning validated rows  (I/O edge)
   src/rows.ts                zod row schemas + row types
   src/ladder.ts              pure: rounds -> cut-off ladder
+  src/chart.ts               pure: rounds -> series, scales, grid and ticks
+  src/streamColours.ts       pure: stream code -> a --stream-* token, not a hex
   src/gap.ts                 pure: score vs the latest cut-off per stream
   src/whatIf.ts              pure: the same profile re-scored, one answer at a time
   src/profile.ts             pure: labels for the codes crs-rules works in
@@ -251,6 +266,7 @@ These come from `ARCHITECTURE.md` §7 and §10. They are requirements, not polis
 - **No Canada wordmark, no flag symbol, no IRCC branding.** Attribute under the Open Government Licence.
 - **No outbound requests from the browser.** No analytics, no third-party scripts, no CDN fonts.
 - **Never present a comparison that is not like for like.** Withholding a number and saying why beats printing a confident wrong one. `round_type = 'program'` on its own mixes CEC and PNP rounds whose cut-offs are hundreds of points apart, which is why every program round now carries a `program_code` and the ladder keys on that: each program is its own comparable stream. The generic `program` bucket survives only as the honest fallback for a round with no code, and shows no movement — see `ARCHITECTURE.md` §11.
+- **The trend chart puts several streams on one axis, and that is not a comparison.** Each line is one stream's own history, in its own colour, with nothing subtracting one line from another — the rule above forbids the comparison, not the shared axis, and the two share an axis because they share a unit. The caveat under the plot says so in words, and the chips exist so a reader can put one stream on its own scale in a click. `src/chart.ts` must never compute a cross-stream difference. Stream colours are `--stream-*` tokens rather than hexes because a chart line's colour is also its label's colour, and a hue that sits on cream paper is unreadable on the dark ground.
 - **Timestamps render in UTC and say "UTC".** Not device-local: pages are ISR-cached server renders, so the server does not know the viewer's timezone and must not guess it.
 - **One exception, and it is the opposite case: a news release date renders in Ottawa time** (`formatNewsDate`, `America/Toronto`). The UTC rule exists so the server never guesses a *viewer's* timezone; this guesses nobody's. IRCC publishes from Ottawa, so the release date is an Ottawa date, already printed on the page each item links to. Rendering it in UTC does not make it more precise, it makes it disagree with the source — it did, on 5 of 104 rows, 3 of them already published. Do not "fix" `formatNewsDate` back to UTC, and do not extend this to a round's tie-break time, which is a UTC instant and not a date anybody printed.
 
@@ -339,7 +355,9 @@ No stray `console.log` left in committed code — if it's worth keeping it's a s
 - Don't add analytics, ad SDKs, or third-party trackers.
 - Don't commit `.env`, service-role keys, or any credential.
 - Don't edit a committed migration.
-- Don't use the Canada wordmark, the flag symbol, or IRCC branding anywhere.
+- Don't use the Canada wordmark, the flag symbol, or IRCC branding anywhere. The header mark is a rotated square and must stay one.
+- Don't load a font from fonts.googleapis.com. `app/fonts.ts` self-hosts them through `next/font`; a `<link>` would be an outbound request from every reader's browser.
+- Don't write a hex into a component or a CSS module. Colours are tokens in `globals.css`, or the dark palette cannot reach them.
 - Don't add a dependency without asking.
 - Don't write a network call in a test. Ingester tests use recorded fixture payloads checked into the repo, and web tests use recorded row fixtures — never a live database.
 - Don't import the service role key, or anything from `packages/ingester`, into `apps/web`.

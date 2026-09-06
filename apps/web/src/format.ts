@@ -37,7 +37,7 @@ const TIME_FORMAT = new Intl.DateTimeFormat('en-CA', {
  * An unparseable timestamp throws rather than rendering "Invalid Date" onto a
  * page about somebody's immigration prospects.
  */
-function toDate(timestamp: string): Date {
+export function parseTimestamp(timestamp: string): Date {
   const iso = timestamp.replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00');
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) throw new Error(`unparseable timestamp: ${timestamp}`);
@@ -45,7 +45,7 @@ function toDate(timestamp: string): Date {
 }
 
 export function formatDate(timestamp: string): string {
-  return DATE_FORMAT.format(toDate(timestamp));
+  return DATE_FORMAT.format(parseTimestamp(timestamp));
 }
 
 /**
@@ -71,16 +71,16 @@ const NEWS_DATE_FORMAT = new Intl.DateTimeFormat('en-CA', {
 });
 
 export function formatNewsDate(timestamp: string): string {
-  return NEWS_DATE_FORMAT.format(toDate(timestamp));
+  return NEWS_DATE_FORMAT.format(parseTimestamp(timestamp));
 }
 
 export function formatDateTime(timestamp: string): string {
-  const date = toDate(timestamp);
+  const date = parseTimestamp(timestamp);
   return `${DATE_FORMAT.format(date)}, ${TIME_FORMAT.format(date)} UTC`;
 }
 
 export function hoursBetween(timestamp: string, now: Date): number {
-  return (now.getTime() - toDate(timestamp).getTime()) / 3_600_000;
+  return (now.getTime() - parseTimestamp(timestamp).getTime()) / 3_600_000;
 }
 
 /**

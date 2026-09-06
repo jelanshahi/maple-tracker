@@ -35,7 +35,7 @@ export function SignInForm() {
       </p>
 
       <p>
-        <button type="submit" className={styles.reset} disabled={pending}>
+        <button type="submit" className={styles.primary} disabled={pending}>
           {pending ? 'Sending…' : 'Email me a sign-in link'}
         </button>
       </p>

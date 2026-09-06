@@ -25,6 +25,7 @@ import { ApplicantFieldsets } from './ApplicantFieldsets.tsx';
 import { CutoffGap } from './CutoffGap.tsx';
 import { SaveProfile } from './SaveProfile.tsx';
 import { ScoreBreakdown } from './ScoreBreakdown.tsx';
+import { ScorePanel } from './ScorePanel.tsx';
 import { SpouseFieldset } from './SpouseFieldset.tsx';
 import { WhatIf } from './WhatIf.tsx';
 import styles from '../ui.module.css';
@@ -56,10 +57,11 @@ export function CalculatorForm({ cutoffs }: { cutoffs: readonly CutoffMark[] }) 
       </form>
 
       <div className={styles.results}>
-        <ScoreBreakdown result={result} ruleSet={crsCurrent} />
+        <ScorePanel result={result} />
         <SaveProfile form={form} onLoad={setForm} />
         <CutoffGap total={result.total} cutoffs={cutoffs} />
         <WhatIf profile={profile} ruleSet={crsCurrent} />
+        <ScoreBreakdown result={result} ruleSet={crsCurrent} />
       </div>
     </div>
   );

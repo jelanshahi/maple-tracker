@@ -2,38 +2,152 @@
  * Design tokens and base styles. No framework, no reset library - the site is a
  * header and some tables, and this is less code than configuring one.
  *
+ * The palette is the one in the Maple Tracker design file: a warm paper ground,
+ * near-black bars top and bottom, and a single maple red doing all the work of
+ * an accent. Values are named by role rather than by hue so the dark block
+ * below can restate them without renaming anything.
+ *
+ * The design is light-only. The dark block is a translation of it rather than
+ * an invention: the same roles, re-grounded, so that a device set to dark does
+ * not get a screenful of cream at midnight.
+ *
  * No Canada wordmark, no flag symbol, no IRCC branding anywhere: those are
- * protected marks and ARCHITECTURE.md section 10 rules them out.
+ * protected marks and ARCHITECTURE.md section 10 rules them out. The diamond in
+ * the header is a rotated square, and deliberately not a maple leaf.
  */
 
 :root {
-  --bg: #fbfbfa;
+  color-scheme: light;
+
+  /* Paper */
+  --bg: #f7f4ef;
   --surface: #ffffff;
-  --border: #e2e0dc;
-  --text: #1c1b19;
-  --muted: #6b6862;
-  --accent: #8c2f39;
-  --warn-bg: #fdf3e7;
-  --warn-border: #e0a458;
-  --warn-text: #7a4a12;
-  --rise: #8c2f39;
+  --sunken: #faf8f4;
+  --border: #e6e1d8;
+  --rule: #f2eee7;
+
+  /* Ink on paper, darkest first */
+  --text: #17161a;
+  --body: #55524c;
+  --muted: #8a8579;
+  --faint: #a09a8e;
+
+  /* The dark bars: header, footer, the score panel */
+  --ink: #1c1a18;
+  --ink-text: #f3ece1;
+  --ink-body: #d9d1c4;
+  --ink-muted: #a29a8c;
+  --ink-dim: #bdb4a6;
+  --ink-rule: rgba(255, 255, 255, 0.12);
+  --ink-hover: rgba(255, 255, 255, 0.08);
+  --ink-link: #e0d6c6;
+
+  --accent: #9a2b34;
+  --accent-hover: #6f1d24;
+  --accent-bright: #c9434e;
+  --on-accent: #ffffff;
+  --selection: #f0d9c4;
+
+  /*
+   * Movement is named from the cut-off's point of view: a line that rose is
+   * --rise. Candidate-facing pages reuse the same two tokens with the sense
+   * inverted, and say so where they do it - one palette, not two.
+   */
+  --rise: #9a2b34;
   --fall: #2f6b4f;
-  --radius: 8px;
+
+  --warn-bg: #fbf1e2;
+  --warn-border: #d9a45c;
+  --warn-text: #7a4a12;
+
+  --radius: 14px;
+  --radius-sm: 9px;
+  --radius-pill: 999px;
+
+  /* 1180px: the design's content measure. */
+  --shell: 73.75rem;
+
+  /*
+   * One slot per stream, so a stream is the same colour in the chart, the
+   * ladder and every table on the site. src/streamColours.ts owns which stream
+   * gets which slot; this owns what the slot looks like.
+   *
+   * They are tokens rather than literals because a chart line's colour is also
+   * its label's colour, and a hue chosen to sit on cream paper is unreadable on
+   * the dark ground below. --stream-none is the grey the uncoded 'program'
+   * bucket gets: it is the absence of a stream, and should not look like one.
+   */
+  --stream-1: #9a2b34;
+  --stream-2: #1f5d7a;
+  --stream-3: #2f6b4f;
+  --stream-4: #6b4a7a;
+  --stream-5: #a06a1f;
+  --stream-6: #5f6b2f;
+  --stream-7: #41697a;
+  --stream-8: #8a5a2b;
+  --stream-9: #7a5c1e;
+  --stream-10: #7a3f5c;
+  --stream-11: #3f5f8a;
+  --stream-12: #2f6b6b;
+  --stream-13: #6b4a2b;
+  --stream-14: #4a5a7a;
+  --stream-15: #705f3f;
+  --stream-none: #8a8579;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
+
     --bg: #16151a;
     --surface: #1e1d23;
+    --sunken: #24232a;
     --border: #333138;
+    --rule: #2a2930;
+
     --text: #ece9e4;
+    --body: #c6c1b9;
     --muted: #a29e97;
+    --faint: #8b8781;
+
+    /* The bars go darker than the page rather than lighter, as they do in light. */
+    --ink: #100f12;
+    --ink-text: #f3ece1;
+    --ink-body: #d9d1c4;
+    --ink-muted: #a29a8c;
+    --ink-dim: #bdb4a6;
+
+    /* Maple red on a dark ground fails contrast; this is the same hue, lifted. */
     --accent: #e8899a;
+    --accent-hover: #f3a8b5;
+    --accent-bright: #e8899a;
+    --on-accent: #1c1a18;
+    --selection: #4a3a26;
+
+    --rise: #e8899a;
+    --fall: #7fc3a1;
+
     --warn-bg: #2e2416;
     --warn-border: #8a6224;
     --warn-text: #f0cf9a;
-    --rise: #e8899a;
-    --fall: #7fc3a1;
+
+    /* The same fifteen hues, lifted until they read as text on a dark ground. */
+    --stream-1: #e8899a;
+    --stream-2: #7fb8d4;
+    --stream-3: #7fc3a1;
+    --stream-4: #c0a0cf;
+    --stream-5: #e0b364;
+    --stream-6: #b3c07a;
+    --stream-7: #9dc0cf;
+    --stream-8: #d9a877;
+    --stream-9: #d1b46e;
+    --stream-10: #cf9ab4;
+    --stream-11: #9db3d9;
+    --stream-12: #79c4c4;
+    --stream-13: #c9a586;
+    --stream-14: #a6b4d4;
+    --stream-15: #c4b490;
+    --stream-none: #a29e97;
   }
 }
 
@@ -47,40 +161,72 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
   line-height: 1.55;
-  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
 }
 
+::selection {
+  background: var(--selection);
+}
+
+/*
+ * Headings are the serif, and set at 400: Instrument Serif has one weight, and
+ * asking a browser to embolden it produces a synthesised face that does not
+ * match the design at any size.
+ */
 h1,
 h2,
 h3 {
-  line-height: 1.2;
-  margin: 0 0 0.4em;
-  font-weight: 650;
+  font-family: var(--font-serif), Georgia, 'Times New Roman', serif;
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.45em;
 }
 
 h1 {
-  font-size: 1.75rem;
-  letter-spacing: -0.015em;
+  font-size: 2.5rem;
 }
 
 h2 {
-  font-size: 1.2rem;
+  font-size: 1.45rem;
+}
+
+h3 {
+  font-size: 1.1rem;
 }
 
 a {
   color: var(--accent);
+  text-decoration: none;
 }
 
-a:focus-visible,
+a:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 3px;
 }
 
-/* Tabular figures keep the cut-off columns aligned down the page. */
+input,
+select,
+button,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/*
+ * Figures are the mono face with tabular figures, everywhere. A column of
+ * four-digit cut-off scores is unscannable in a proportional face, and the
+ * whole site is columns of four-digit cut-off scores.
+ */
 table {
   font-variant-numeric: tabular-nums;
 }

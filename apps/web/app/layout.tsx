@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 import { STALE_AFTER_HOURS, formatDateTime, isStale } from '../src/format.ts';
 import { fetchLastVerifiedAt } from '../src/queries.ts';
 import { createReadClient } from '../src/supabase.ts';
+import { SiteNav } from './SiteNav.tsx';
+import { fontVariables } from './fonts.ts';
 import './globals.css';
 import styles from './ui.module.css';
 
@@ -43,53 +45,56 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const lastVerified = await fetchLastVerifiedAt(createReadClient());
 
   return (
-    <html lang="en">
+    <html lang="en" className={fontVariables}>
       <body>
-        <div className={styles.page}>
-          <header className={styles.header}>
-            <Link href="/" className={styles.wordmark}>
-              Maple Tracker
-            </Link>
-            <nav className={styles.nav}>
-              <Link href="/">Latest</Link>
-              <Link href="/rounds">Rounds</Link>
-              <Link href="/categories">Cut-off ladder</Link>
-              <Link href="/calculator">Calculator</Link>
-              <Link href="/news">News</Link>
-              <Link href="/history">My scores</Link>
-              <Link href="/account">Account</Link>
-            </nav>
+        <div className={styles.shell}>
+          {/* The bars run edge to edge; only their contents keep to the measure. */}
+          <header className={styles.bar}>
+            <div className={styles.barInner}>
+              <Link href="/" className={styles.wordmark}>
+                <span className={styles.mark} aria-hidden="true" />
+                Maple Tracker
+              </Link>
+              <SiteNav />
+            </div>
           </header>
 
-          <VerificationBanner lastVerified={lastVerified} now={new Date()} />
+          <main className={styles.main}>
+            <VerificationBanner lastVerified={lastVerified} now={new Date()} />
+            {children}
+          </main>
 
-          <main>{children}</main>
-
-          <footer className={styles.footer}>
-            <p>
-              <strong>Not affiliated with, endorsed by, or connected to Immigration, Refugees and
-              Citizenship Canada or the Government of Canada.</strong> This is an independent personal
-              project, and nothing here is immigration advice. For anything that matters, use the
-              official pages.
-            </p>
-            <p>
-              Every figure comes from IRCC&rsquo;s published rounds-of-invitations dataset and links
-              back to the round it came from. Contains information licensed under the{' '}
-              <a href="https://open.canada.ca/en/open-government-licence-canada">
-                Open Government Licence &ndash; Canada
-              </a>
-              .
-            </p>
-            <p>
-              Official sources:{' '}
-              <a href="https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry/rounds-invitations.html">
-                Rounds of invitations
-              </a>{' '}
-              &middot;{' '}
-              <a href="https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry/check-score.html">
-                IRCC&rsquo;s CRS calculator
-              </a>
-            </p>
+          <footer className={styles.footerBar}>
+            <div className={styles.footerInner}>
+              <div>
+                <p>
+                  <strong>Not affiliated with, endorsed by, or connected to Immigration, Refugees
+                  and Citizenship Canada or the Government of Canada.</strong> This is an
+                  independent personal project, and nothing here is immigration advice. For anything
+                  that matters, use the official pages.
+                </p>
+              </div>
+              <div>
+                <p>
+                  Every figure comes from IRCC&rsquo;s published rounds-of-invitations dataset and
+                  links back to the round it came from. Contains information licensed under the{' '}
+                  <a href="https://open.canada.ca/en/open-government-licence-canada">
+                    Open Government Licence &ndash; Canada
+                  </a>
+                  .
+                </p>
+                <p>
+                  Official sources:{' '}
+                  <a href="https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry/rounds-invitations.html">
+                    Rounds of invitations
+                  </a>{' '}
+                  &middot;{' '}
+                  <a href="https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry/check-score.html">
+                    IRCC&rsquo;s CRS calculator
+                  </a>
+                </p>
+              </div>
+            </div>
           </footer>
         </div>
       </body>

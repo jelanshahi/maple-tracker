@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * The score, and everything behind it.
+ * Everything behind the total. The total itself is ScorePanel, above this.
  *
  * ARCHITECTURE.md section 6: a bare number is useless to a user and
  * unauditable to us, so every section and every factor reports its own points.
@@ -23,15 +23,8 @@ const IRCC_CALCULATOR =
 
 export function ScoreBreakdown({ result, ruleSet }: { result: ScoreResult; ruleSet: RuleSet }) {
   return (
-    <section className={styles.card} aria-labelledby="score-heading">
-      <h2 id="score-heading">Your estimated score</h2>
-
-      <div className={styles.headline}>
-        <div className={styles.metric}>
-          <span className={styles.metricValue}>{formatInteger(result.total)}</span>
-          <span className={styles.metricLabel}>Comprehensive Ranking System points</span>
-        </div>
-      </div>
+    <section className={styles.card} aria-labelledby="breakdown-heading">
+      <h2 id="breakdown-heading">How the estimate is made up</h2>
 
       <p className={styles.estimate}>
         This is an estimate produced by this site, not a score from IRCC. Only IRCC scores a real
@@ -95,7 +88,7 @@ export function ScoreBreakdown({ result, ruleSet }: { result: ScoreResult; ruleS
               <tr key={factor.key}>
                 <td>{factor.label}</td>
                 <td className={styles.numeric}>{formatInteger(factor.points)}</td>
-                <td className={styles.muted}>{factor.explanation}</td>
+                <td className={`${styles.muted} ${styles.wrapCell}`}>{factor.explanation}</td>
               </tr>
             ))}
           </tbody>

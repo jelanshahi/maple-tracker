@@ -41,7 +41,7 @@ const GROUPS = Object.keys(GROUP_LABELS) as ReadonlyArray<keyof typeof GROUP_LAB
  */
 const leverRow = (lever: LeverResult) => (
   <tr key={lever.key}>
-    <td className={styles.leverChange}>
+    <td className={styles.wrapCell}>
       {lever.label}
       {lever.note === undefined ? null : <span className={styles.hint}> {lever.note}</span>}
     </td>
@@ -91,7 +91,7 @@ export function WhatIf({ profile, ruleSet }: { profile: Profile; ruleSet: RuleSe
 
           {grouped.map(({ group, rows }) => (
             <tbody key={group}>
-              <tr>
+              <tr className={styles.rowGroup}>
                 <th scope="rowgroup" colSpan={3}>{GROUP_LABELS[group]}</th>
               </tr>
               {rows.map(leverRow)}

@@ -1,6 +1,7 @@
 import { formatChange, formatDate, formatInteger } from '../../src/format.ts';
 import { buildLadder } from '../../src/ladder.ts';
 import { fetchCategories, fetchPrograms, fetchRounds } from '../../src/queries.ts';
+import { streamColour } from '../../src/streamColours.ts';
 import { createReadClient } from '../../src/supabase.ts';
 import styles from '../ui.module.css';
 
@@ -54,7 +55,16 @@ export default async function CategoriesPage() {
           <tbody>
             {ladder.map((entry) => (
               <tr key={entry.key}>
-                <th scope="row">{entry.label}</th>
+                <th scope="row">
+                  <span className={styles.streamCell}>
+                    <span
+                      className={styles.dot}
+                      style={{ background: streamColour(entry.key) }}
+                      aria-hidden="true"
+                    />
+                    {entry.label}
+                  </span>
+                </th>
                 <td className={styles.numeric}>{formatInteger(entry.latest.cutoff_crs)}</td>
                 <td className={`${styles.numeric} ${changeClass(entry.change) ?? styles.muted}`}>
                   {changeCell(entry)}

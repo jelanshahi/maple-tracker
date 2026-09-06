@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { describeRoundType, formatDate, formatDateTime, formatInteger, streamLabel } from '../src/format.ts';
+import { streamKey } from '../src/ladder.ts';
 import type { DrawRound } from '../src/rows.ts';
+import { streamColour } from '../src/streamColours.ts';
 import styles from './ui.module.css';
 
 /**
@@ -43,7 +45,18 @@ export function RoundsTable({
                   </Link>
                 </td>
                 <td>{formatDate(round.drawn_at)}</td>
-                <td>{describeRoundType(round.round_type, label)}</td>
+                <td>
+                  {/* The same colour this stream has in the trend chart, so the
+                      two read as one picture rather than two datasets. */}
+                  <span className={styles.streamCell}>
+                    <span
+                      className={styles.dot}
+                      style={{ background: streamColour(streamKey(round)) }}
+                      aria-hidden="true"
+                    />
+                    {describeRoundType(round.round_type, label)}
+                  </span>
+                </td>
                 <td className={styles.numeric}>{formatInteger(round.cutoff_crs)}</td>
                 <td className={styles.numeric}>{formatInteger(round.invitations)}</td>
                 <td className={styles.muted}>
