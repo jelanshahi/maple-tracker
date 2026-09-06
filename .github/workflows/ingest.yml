@@ -1,0 +1,163 @@
+# Runs `pnpm ingest` when IRCC changes the rounds file, and on a heartbeat.
+#
+# CLAUDE.md keeps scheduling out of the build order on the grounds that the cron
+# calling `pnpm ingest` is a deployment decision rather than a code one. This
+# file is that decision, and it is why nothing under packages/ changed to add
+# it: the probe below is curl, and the ingester it calls is the same command a
+# human types.
+#
+# The cheap part is the probe. The rounds file is a ~800 KB static JSON asset,
+# and the ingester cache-busts it deliberately, so polling by downloading it
+# would pull a quarter of a gigabyte a day off a government CDN. The file does
+# honour If-Modified-Since - verified 2026-09-06, a conditional request returns
+# 304 with a zero-length body - so a HEAD asking only for Last-Modified is
+# enough to tell whether there is anything to do, and costs a few hundred bytes.
+
+name: Ingest IRCC rounds
+
+on:
+  schedule:
+    # IRCC draws on weekdays only - 103 rounds over 18 months, not one on a
+    # weekend - between roughly 10:00 and 18:00 UTC, and the JSON trails the
+    # draw by about two hours. This is that window, probed every five minutes.
+    # GitHub treats cron as a request rather than a promise and drifts under
+    # load, so expect to notice a change 5-20 minutes after it lands.
+    - cron: '*/5 12-20 * * 1-5'
+
+    # A full run four times a day regardless of the probe, for two reasons that
+    # both matter. The staleness banner reads ingestion_runs and calls the site
+    # out after 24 hours, so a week with no draw must still record that we
+    # looked - otherwise the site accuses itself of being stale while working
+    # perfectly. And it re-runs the health checks, which is the only thing that
+    # would notice the probe silently going wrong.
+    - cron: '0 2,8,14,20 * * *'
+
+  workflow_dispatch:
+
+# Never two runs at once. The ingester is idempotent, but overlapping runs would
+# interleave rows in ingestion_runs for no benefit.
+concurrency:
+  group: ingest-rounds
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      # A heartbeat run and a hand-started run both skip the probe entirely.
+      # `github.event.schedule` is the cron line that actually fired, which is
+      # how one workflow tells its two schedules apart.
+      FULL_RUN: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '0 2,8,14,20 * * *' }}
+
+    steps:
+      - name: Ask IRCC when the rounds file last changed
+        id: probe
+        if: ${{ env.FULL_RUN != 'true' }}
+        env:
+          CONTACT_URL: ${{ secrets.INGEST_CONTACT_URL }}
+        run: |
+          set -uo pipefail
+          URL='https://www.canada.ca/content/dam/ircc/documents/json/ee_rounds_123_en.json'
+
+          # Deliberately not `set -e`. A probe that cannot reach canada.ca must
+          # not fail the workflow and mail you about it - it should fall through
+          # to a real run, where the ingester's own retry, backoff and
+          # error handling are the things designed to decide what a network
+          # failure means.
+          LAST_MODIFIED="$(
+            curl -sSI --max-time 20 -A "MapleTracker/0.1 (+${CONTACT_URL:-unknown})" "$URL" \
+              | tr -d '\r' \
+              | awk 'tolower($1) == "last-modified:" { sub(/^[^:]*: /, ""); print }'
+          )" || true
+
+          if [ -z "${LAST_MODIFIED}" ]; then
+            echo "No Last-Modified header came back. Falling through to a full run."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "IRCC last changed the file at: ${LAST_MODIFIED}"
+          echo "skip=maybe" >> "$GITHUB_OUTPUT"
+          # Written outside the workspace on purpose: actions/checkout runs
+          # later in this job and cleans untracked files out of it.
+          printf '%s\n' "${LAST_MODIFIED}" > "${RUNNER_TEMP}/ingest-marker.txt"
+          echo "cache-key=ircc-rounds-$(printf '%s' "${LAST_MODIFIED}" | sha256sum | cut -c1-40)" >> "$GITHUB_OUTPUT"
+
+      # The cache key IS the answer. A hit means some earlier run already
+      # ingested this exact version of the file, so there is nothing to do. A
+      # miss means the file moved on. Nothing is read out of the cache and
+      # nothing is parsed - only whether the key exists.
+      #
+      # GitHub evicts a cache entry after seven days untouched, but every probe
+      # touches it, so it stays warm while this workflow runs at all. If one
+      # does fall out, the cost is a single unnecessary ingest that records
+      # no_change. That is the right way round for this to fail.
+      - name: Have we already ingested this version?
+        id: seen
+        if: ${{ env.FULL_RUN != 'true' && steps.probe.outputs.skip == 'maybe' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ingest-marker.txt
+          key: ${{ steps.probe.outputs.cache-key }}
+          lookup-only: true
+
+      - name: Decide
+        id: decide
+        run: |
+          if [ "${FULL_RUN}" = "true" ]; then
+            echo "Heartbeat or manual run: ingesting unconditionally."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ steps.seen.outputs.cache-hit }}" = "true" ]; then
+            echo "This version has already been ingested. Nothing to do."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "The rounds file has changed since the last ingest."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: ${{ steps.decide.outputs.run == 'true' }}
+
+      - uses: pnpm/action-setup@v4
+        if: ${{ steps.decide.outputs.run == 'true' }}
+        with:
+          version: 11.22.0
+
+      - uses: actions/setup-node@v4
+        if: ${{ steps.decide.outputs.run == 'true' }}
+        with:
+          # The ingest script runs bin/ingest.ts through Node directly, so the
+          # runner needs a Node that strips types without a flag.
+          node-version: 24
+          cache: pnpm
+
+      # Only the ingester and what it depends on. A full install would drag in
+      # Next and React to run a script that never touches them.
+      - name: Install
+        if: ${{ steps.decide.outputs.run == 'true' }}
+        run: pnpm install --frozen-lockfile --filter '@maple/ingester...'
+
+      - name: Ingest
+        if: ${{ steps.decide.outputs.run == 'true' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # Bypasses RLS. It lives here and in packages/ingester and nowhere
+          # else - apps/web has no path to it and must never be given one.
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          INGEST_CONTACT_URL: ${{ secrets.INGEST_CONTACT_URL }}
+        run: pnpm ingest
+
+      # Only after the ingest actually succeeded. Recording the version before
+      # knowing it landed would let one failed run suppress every retry until
+      # IRCC published again.
+      - name: Remember this version
+        if: ${{ success() && steps.decide.outputs.run == 'true' && steps.probe.outputs.cache-key != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ingest-marker.txt
+          key: ${{ steps.probe.outputs.cache-key }}
